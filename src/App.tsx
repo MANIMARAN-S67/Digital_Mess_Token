@@ -18,9 +18,14 @@ import {
   INITIAL_LOGS,
   INITIAL_STATS
 } from './data/initialData';
+import { LoginScreen } from './components/LoginScreen';
+import { TwoFactorScreen } from './components/TwoFactorScreen';
 import { DailyMenu, DailyStats, MealType, Student, TokenIssuanceLog } from './types';
 
+type AuthStep = 'login' | '2fa' | 'authenticated';
+
 export default function App() {
+  const [authStep, setAuthStep] = useState<AuthStep>('login');
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
   const [currentMeal, setCurrentMeal] = useState<MealType>('Lunch');
   
@@ -252,6 +257,19 @@ export default function App() {
     setSelectedStudentId(studentId);
     setCurrentTab('search');
   };
+
+  if (authStep === 'login') {
+    return <LoginScreen onProceedTo2FA={() => setAuthStep('2fa')} />;
+  }
+
+  if (authStep === '2fa') {
+    return (
+      <TwoFactorScreen 
+        onAuthenticate={() => setAuthStep('authenticated')} 
+        onBackToLogin={() => setAuthStep('login')} 
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] text-[#0d1c2e] flex flex-col font-sans selection:bg-[#1a365d] selection:text-white">
