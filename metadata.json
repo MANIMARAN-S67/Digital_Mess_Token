@@ -1,0 +1,6 @@
+{
+  "name": "Mess Manager",
+  "description": "Institutional Mess Token Management System for student dining, token issuance, daily menus, and attendance analytics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
