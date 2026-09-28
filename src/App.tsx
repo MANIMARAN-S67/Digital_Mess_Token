@@ -187,6 +187,13 @@ export default function App() {
 
     setLogs((prev) => [newLog, ...prev]);
 
+    // Sync to Salesforce (Vercel Serverless Function)
+    fetch('/api/tokens', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newLog)
+    }).catch(err => console.error('Salesforce Sync Error:', err));
+
     // 3. Update stats
     setStats((prev) => {
       const isVeg = student.preference === 'Veg';

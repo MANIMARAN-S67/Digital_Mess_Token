@@ -43,6 +43,13 @@ export const RegisterStudentModal: React.FC<RegisterStudentModalProps> = ({
       issuedSessionsToday: {}
     };
 
+    // Sync to Salesforce via Vercel Serverless Function
+    fetch('/api/students', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newStudent)
+    }).catch(err => console.error('Salesforce Sync Error:', err));
+
     onRegisterStudent(newStudent);
     onClose();
   };
