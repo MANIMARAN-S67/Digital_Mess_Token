@@ -1,0 +1,12 @@
+{
+  "packageDirectories": [
+    {
+      "path": "sf/force-app",
+      "default": true
+    }
+  ],
+  "name": "Digital-Mess-Token",
+  "namespace": "",
+  "sfdcLoginUrl": "https://login.salesforce.com",
+  "sourceApiVersion": "59.0"
+}

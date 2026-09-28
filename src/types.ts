@@ -14,6 +14,7 @@ export interface Student {
   email?: string;
   issuedSessionsToday: {
     [key in MealType]?: {
+      tokenId?: string;
       tokenNumber: string;
       issuedAt: string; // e.g. "12:45 PM"
       timestamp: number;
