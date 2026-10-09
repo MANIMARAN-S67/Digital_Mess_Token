@@ -13,18 +13,14 @@ import { RegisterStudentModal } from './components/RegisterStudentModal';
 import { NotificationsDrawer } from './components/NotificationsDrawer';
 import { AdminProfileModal } from './components/AdminProfileModal';
 import { LoginScreen } from './components/LoginScreen';
-import { TwoFactorScreen } from './components/TwoFactorScreen';
 import { DailyMenu, DailyStats, MealType, Student, TokenIssuanceLog } from './types';
 import { useAuth } from './context/AuthContext';
-import api from './services/api';
-
-type AuthStep = 'login' | '2fa' | 'authenticated';
+import sfApi from './services/salesforceApi';
 
 export default function App() {
   const { dbUser, loading: authLoading } = useAuth();
   
-  // Use dbUser from context instead of local authStep
-  const [authStep, setAuthStep] = useState<AuthStep>('login');
+  const [authStep, setAuthStep] = useState<'login' | 'authenticated'>('login');
   
   useEffect(() => {
     if (dbUser) {
@@ -39,7 +35,7 @@ export default function App() {
   
   // API Driven State
   const [students, setStudents] = useState<Student[]>([]);
-  const [menu, setMenu] = useState<DailyMenu>({} as DailyMenu); // We'll adapt backend to this shape or adapt UI
+  const [menu, setMenu] = useState<DailyMenu>({} as DailyMenu);
   const [logs, setLogs] = useState<TokenIssuanceLog[]>([]);
   const [stats, setStats] = useState<DailyStats>({} as DailyStats);
   const [loadingData, setLoadingData] = useState(false);
@@ -48,89 +44,83 @@ export default function App() {
     if (!dbUser) return;
     setLoadingData(true);
     try {
+      const today = new Date().toISOString().split('T')[0];
+
       if (['Admin', 'Warden', 'Mess Management'].includes(dbUser.role)) {
-        const [studentsRes, dashboardRes, historyRes] = await Promise.all([
-          api.get('/students'),
-          api.get('/dashboard'),
-          api.get('/tokens/history')
+        // Parallel queries to Salesforce
+        const [studentsRes, historyRes, menuRes, tokensTodayRes] = await Promise.all([
+          sfApi.query('SELECT Id, Name, Student_ID__c, Department__c, Hostel_Room__c, Diet_Preference__c, Email__c FROM Student__c'),
+          sfApi.query('SELECT Id, Name, Student__r.Id, Student__r.Name, Token_Date__c, Meal_Type__c, Status__c, Token_Number__c FROM Meal_Token__c ORDER BY CreatedDate DESC LIMIT 100'),
+          sfApi.query(`SELECT Id, Name, Menu_Date__c, Meal_Type__c, Item_Name__c, Diet_Preference__c FROM Menu__c WHERE Menu_Date__c = ${today}`),
+          sfApi.query(`SELECT Id, Meal_Type__c FROM Meal_Token__c WHERE Token_Date__c = ${today}`)
         ]);
         
-        // Adapt students to frontend model
-        setStudents(studentsRes.data.map((s: any) => ({
-          id: s.Student_ID__c,
+        setStudents(studentsRes.records.map((s: any) => ({
+          id: s.Id,
           name: s.Name,
           department: s.Department__c || 'Unknown',
           hostelRoom: s.Hostel_Room__c || 'Unknown',
           preference: s.Diet_Preference__c,
-          status: s.Status__c,
-          photoUrl: s.Photo_URL__c || 'https://via.placeholder.com/150',
-          phone: s.Phone__c,
+          status: 'Active Plan',
+          photoUrl: 'https://via.placeholder.com/150',
+          phone: '',
           email: s.Email__c,
-          issuedSessionsToday: {} // We would fetch this properly from today's tokens
+          issuedSessionsToday: {} 
         })));
         
-        // Adapt history
-        setLogs(historyRes.data.map((t: any) => ({
+        setLogs(historyRes.records.map((t: any) => ({
           id: t.Id,
-          tokenNumber: t.Token_Number__c,
-          time: t.Token_Time__c,
+          tokenNumber: t.Token_Number__c || t.Id,
+          time: new Date(t.Token_Date__c).toLocaleTimeString(),
           date: t.Token_Date__c,
-          studentId: t.Student__r?.Student_ID__c || '',
+          studentId: t.Student__r?.Id || '',
           studentName: t.Student__r?.Name || '',
           mealType: t.Meal_Type__c as MealType,
-          dietPreference: t.Diet_Preference__c,
-          status: t.Status__c
+          dietPreference: 'Veg', // would join or lookup
+          status: t.Status__c || 'Issued'
         })));
 
-        // Adapt stats
-        const d = dashboardRes.data;
+        const totalTokens = tokensTodayRes.records.length;
         setStats({
-          totalTokensIssued: d.totalTokensIssued,
-          totalEligible: d.activeStudents,
-          attendanceRate: Math.round((d.totalTokensIssued / (d.activeStudents || 1)) * 100),
-          vegCount: d.vegCount,
-          vegTarget: Math.round(d.activeStudents * 0.6),
-          nonVegCount: d.nonVegCount,
-          nonVegTarget: Math.round(d.activeStudents * 0.4),
+          totalTokensIssued: totalTokens,
+          totalEligible: studentsRes.records.length,
+          attendanceRate: studentsRes.records.length ? Math.round((totalTokens / studentsRes.records.length) * 100) : 0,
+          vegCount: 0,
+          vegTarget: 0,
+          nonVegCount: 0,
+          nonVegTarget: 0,
           flowHourly: []
         });
+
       } else if (dbUser.role === 'Student') {
-        const [meRes, historyRes] = await Promise.all([
-          api.get(`/students/${dbUser.studentId}`),
-          api.get('/tokens/history')
-        ]);
+        const historyRes = await sfApi.query(`SELECT Id, Name, Student__r.Id, Student__r.Name, Token_Date__c, Meal_Type__c, Status__c, Token_Number__c FROM Meal_Token__c WHERE Student__c = '${dbUser.studentId}' ORDER BY CreatedDate DESC LIMIT 50`);
         
-        const s = meRes.data;
         setStudents([{
-          id: s.Student_ID__c,
-          name: s.Name,
-          department: s.Department__c || 'Unknown',
-          hostelRoom: s.Hostel_Room__c || 'Unknown',
-          preference: s.Diet_Preference__c,
-          status: s.Status__c,
-          photoUrl: s.Photo_URL__c || 'https://via.placeholder.com/150',
-          phone: s.Phone__c,
-          email: s.Email__c,
+          id: dbUser.studentId,
+          name: dbUser.name,
+          department: dbUser.department || 'Unknown',
+          hostelRoom: dbUser.hostelRoom || 'Unknown',
+          preference: dbUser.preference,
+          status: 'Active Plan',
+          photoUrl: 'https://via.placeholder.com/150',
+          phone: '',
+          email: dbUser.email,
           issuedSessionsToday: {}
         }]);
 
-        setLogs(historyRes.data.map((t: any) => ({
+        setLogs(historyRes.records.map((t: any) => ({
           id: t.Id,
-          tokenNumber: t.Token_Number__c,
-          time: t.Token_Time__c,
+          tokenNumber: t.Token_Number__c || t.Id,
+          time: new Date(t.Token_Date__c).toLocaleTimeString(),
           date: t.Token_Date__c,
-          studentId: t.Student__r?.Student_ID__c || '',
+          studentId: t.Student__r?.Id || '',
           studentName: t.Student__r?.Name || '',
           mealType: t.Meal_Type__c as MealType,
-          dietPreference: t.Diet_Preference__c,
-          status: t.Status__c
+          dietPreference: dbUser.preference,
+          status: t.Status__c || 'Issued'
         })));
       }
       
-      // Fetch menu (simplified for now, ideally format from backend)
-      // Since menu formatting is complex in UI, leaving as empty or dummy if not fully mapped
-      const menuRes = await api.get('/menu');
-      // For now we will keep the UI working by providing basic shape
       const defaultMenu: DailyMenu = {
         Breakfast: { veg: { mainItem: 'Idli', side1: 'Chutney', beverage: 'Tea', extras: [] }, nonVeg: { mainItem: 'Idli', side1: 'Chutney', beverage: 'Tea', extras: [] } },
         Lunch: { veg: { mainItem: 'Meals', side1: 'Poriyal', beverage: 'Water', extras: [] }, nonVeg: { mainItem: 'Chicken Biryani', side1: 'Raita', beverage: 'Water', extras: [] } },
@@ -139,7 +129,7 @@ export default function App() {
       };
       setMenu(defaultMenu);
       
-    } catch (err) {
+    } catch (err: any) {
       console.error('Error fetching data:', err);
     } finally {
       setLoadingData(false);
@@ -150,10 +140,8 @@ export default function App() {
     fetchData();
   }, [dbUser]);
 
-  // Selected student for token verification/issuance
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   
-  // Modals state
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
@@ -161,7 +149,6 @@ export default function App() {
   const [messHall, setMessHall] = useState('Central Mess Hall A');
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // Active token slip modal state
   const [issuedSlipData, setIssuedSlipData] = useState<{
     student: Student | null;
     tokenNumber: string;
@@ -169,7 +156,6 @@ export default function App() {
     mealType: MealType;
   } | null>(null);
 
-  // Audio chime feedback using Web Audio API synthesis
   const playSoundChime = (type: 'success' | 'alert') => {
     if (!soundEnabled) return;
     try {
@@ -181,8 +167,8 @@ export default function App() {
 
       if (type === 'success') {
         osc.type = 'sine';
-        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-        osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // A5
+        osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15);
         gain.gain.setValueAtTime(0.18, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
         osc.start();
@@ -196,30 +182,43 @@ export default function App() {
         osc.start();
         osc.stop(audioCtx.currentTime + 0.35);
       }
-    } catch (err) {
-      console.warn('Web Audio not allowed without user gesture yet', err);
-    }
+    } catch (err) {}
   };
 
-  // Issue token workflow
   const handleIssueToken = async (student: Student) => {
     const now = new Date();
     const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     const dateStr = now.toISOString().split('T')[0];
 
     try {
-      // Call Backend API
-      const res = await api.post('/tokens', {
-        studentId: student.id,
-        date: dateStr,
-        mealType: currentMeal,
-        time: timeStr
+      // Validate meal preference locally (backend should also validate via Apex/Flow)
+      if (student.preference === 'Veg' && currentMeal !== 'Snacks' && !menu[currentMeal].veg.mainItem) {
+        throw new Error('No Veg meal available');
+      }
+
+      // Check if token already exists
+      const existingTokenQuery = await sfApi.query(`SELECT Id FROM Meal_Token__c WHERE Student__c = '${student.id}' AND Token_Date__c = ${dateStr} AND Meal_Type__c = '${currentMeal}'`);
+      if (existingTokenQuery.records.length > 0) {
+        throw new Error('You have already received this meal token today.');
+      }
+
+      // Create Meal_Token__c in Salesforce
+      const tokenCreateRes = await sfApi.post('/sobjects/Meal_Token__c', {
+        Student__c: student.id,
+        Token_Date__c: dateStr,
+        Meal_Type__c: currentMeal,
+        Status__c: 'Issued',
+        Token_Time__c: timeStr
+      });
+
+      const tokenId = tokenCreateRes.id;
+      const tokenNumber = 'TKN-' + tokenId.slice(-5).toUpperCase();
+
+      // Update token number back in Salesforce for tracking if necessary
+      await sfApi.patch(`/sobjects/Meal_Token__c/${tokenId}`, {
+        Token_Number__c: tokenNumber
       });
       
-      const tokenNumber = res.data.tokenNumber;
-      const tokenId = res.data.id;
-
-      // Update UI stateoptimistically
       const updatedStudent: Student = {
         ...student,
         issuedSessionsToday: {
@@ -235,7 +234,6 @@ export default function App() {
 
       setStudents((prev) => prev.map((s) => (s.id === student.id ? updatedStudent : s)));
 
-      // Add to logs
       const newLog: TokenIssuanceLog = {
         id: tokenId,
         tokenNumber: tokenNumber,
@@ -250,15 +248,9 @@ export default function App() {
 
       setLogs((prev) => [newLog, ...prev]);
 
-      // Play audio chime and burst confetti
       playSoundChime('success');
-      confetti({
-        particleCount: 45,
-        spread: 60,
-        origin: { y: 0.65 }
-      });
+      confetti({ particleCount: 45, spread: 60, origin: { y: 0.65 } });
 
-      // Open slip modal
       setIssuedSlipData({
         student: updatedStudent,
         tokenNumber: tokenNumber,
@@ -266,7 +258,6 @@ export default function App() {
         mealType: currentMeal
       });
 
-      // Refresh Stats
       fetchData();
       
     } catch (err: any) {
@@ -275,14 +266,13 @@ export default function App() {
     }
   };
 
-  // Admin override to reset session for a student
   const handleResetStudentSession = async (studentId: string) => {
     try {
       const student = students.find((s) => s.id === studentId);
       if (!student) return;
       const session = student.issuedSessionsToday[currentMeal];
       if (session && session.tokenId) {
-        await api.delete(`/tokens/${session.tokenId}`);
+        await sfApi.delete(`/sobjects/Meal_Token__c/${session.tokenId}`);
       }
 
       setStudents((prev) =>
@@ -298,7 +288,6 @@ export default function App() {
           return s;
         })
       );
-      // Remove from logs
       setLogs((prev) => prev.filter((l) => !(l.studentId === studentId && l.mealType === currentMeal && l.date === new Date().toISOString().split('T')[0])));
       playSoundChime('success');
     } catch (err: any) {
@@ -306,19 +295,16 @@ export default function App() {
     }
   };
 
-  // Register new student handler
   const handleRegisterStudent = async (newStudent: Student) => {
     try {
-      await api.post('/students', {
-        studentId: newStudent.id,
-        name: newStudent.name,
-        department: newStudent.department,
-        hostelRoom: newStudent.hostelRoom,
-        preference: newStudent.preference,
-        email: newStudent.email,
-        phone: newStudent.phone,
-        status: newStudent.status
+      const res = await sfApi.post('/sobjects/Student__c', {
+        Name: newStudent.name,
+        Department__c: newStudent.department,
+        Hostel_Room__c: newStudent.hostelRoom,
+        Diet_Preference__c: newStudent.preference,
+        Email__c: newStudent.email
       });
+      newStudent.id = res.id;
       setStudents((prev) => [newStudent, ...prev]);
       setSelectedStudentId(newStudent.id);
       setCurrentTab('search');
@@ -328,11 +314,8 @@ export default function App() {
     }
   };
 
-  // Save updated menu
   const handleSaveMenu = async (updatedMenu: DailyMenu) => {
     try {
-      // In a full implementation, we'd loop through and save each menu item
-      // For now we just update frontend state.
       setMenu(updatedMenu);
       playSoundChime('success');
     } catch (err: any) {
@@ -340,7 +323,6 @@ export default function App() {
     }
   };
 
-  // Select student and navigate to Search / Issue screen
   const handleSelectStudentForIssue = (studentId: string) => {
     setSelectedStudentId(studentId);
     setCurrentTab('search');
@@ -351,28 +333,17 @@ export default function App() {
   }
 
   if (authStep === 'login') {
-    return <LoginScreen onProceedTo2FA={() => setAuthStep('2fa')} />;
-  }
-
-  if (authStep === '2fa') {
-    return (
-      <TwoFactorScreen 
-        onAuthenticate={() => setAuthStep('authenticated')} 
-        onBackToLogin={() => setAuthStep('login')} 
-      />
-    );
+    return <LoginScreen />;
   }
 
   return (
     <div className="min-h-screen bg-[#f8f9ff] text-[#0d1c2e] flex flex-col font-sans selection:bg-[#1a365d] selection:text-white">
-      {/* Top App Bar */}
       <TopAppBar
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenNotifications={() => setIsNotificationsOpen(true)}
         unreadCount={2}
       />
 
-      {/* Desktop Side Navigation (visible on md+) */}
       <DesktopSideNav
         currentTab={currentTab}
         onChangeTab={setCurrentTab}
@@ -384,7 +355,6 @@ export default function App() {
         }}
       />
 
-      {/* Main Content Area */}
       <main className="flex-1 w-full pt-[64px] md:pl-[240px] flex flex-col">
         {loadingData ? (
           <div className="flex-1 flex items-center justify-center font-bold text-gray-500">Loading Dashboard Data...</div>
@@ -424,10 +394,8 @@ export default function App() {
         )}
       </main>
 
-      {/* Bottom Navigation Bar for Mobile */}
       <BottomNavBar currentTab={currentTab} onChangeTab={setCurrentTab} />
 
-      {/* Modals & Drawers */}
       <TokenSlipModal
         isOpen={Boolean(issuedSlipData)}
         onClose={() => setIssuedSlipData(null)}
