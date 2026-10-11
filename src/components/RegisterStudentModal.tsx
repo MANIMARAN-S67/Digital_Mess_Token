@@ -18,6 +18,7 @@ export const RegisterStudentModal: React.FC<RegisterStudentModalProps> = ({
   const [hostelRoom, setHostelRoom] = useState('BH-1 / 101');
   const [preference, setPreference] = useState<DietPreference>('Veg');
   const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
 
   if (!isOpen) return null;
 
@@ -39,7 +40,7 @@ export const RegisterStudentModal: React.FC<RegisterStudentModalProps> = ({
         name.trim()
       )}&background=002045&color=fff&size=200`,
       phone: phone.trim() || '+91 99999 00000',
-      email: `${id.trim().toLowerCase()}@institution.edu`,
+      email: email.trim() || `${id.trim().toLowerCase()}@institution.edu`,
       issuedSessionsToday: {}
     };
 
@@ -98,6 +99,19 @@ export const RegisterStudentModal: React.FC<RegisterStudentModalProps> = ({
               value={id}
               onChange={(e) => setId(e.target.value)}
               className="w-full h-11 px-3.5 border border-[#74777f] rounded-lg text-[14px] font-mono text-[#0d1c2e] focus:border-[#002045] outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-bold text-[#43474e] uppercase mb-1">
+              Google / Student Email
+            </label>
+            <input
+              type="email"
+              placeholder="e.g. student@gmail.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full h-11 px-3.5 border border-[#74777f] rounded-lg text-[14px] text-[#0d1c2e] focus:border-[#002045] outline-none"
             />
           </div>
 

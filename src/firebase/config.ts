@@ -3,7 +3,7 @@ import { getAnalytics } from "firebase/analytics";
 import { getAuth } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBKEXZK9rPC0ZN56AyFkzuZ72-032wg89k",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyAeI-aNP79FSumBPgC7VfmWmRFKFzgNGpU",
   authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "digitalmesstoken.firebaseapp.com",
   projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "digitalmesstoken",
   storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "digitalmesstoken.firebasestorage.app",

@@ -302,18 +302,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   </td>
                   <td className="py-3 px-4 align-top text-[#0d1c2e]">
                     <div className="font-semibold text-[#0a6c44]">
-                      {menu.Breakfast.veg.mainItem}
+                      {menu?.Breakfast?.veg?.mainItem || 'Idli'}
                     </div>
                     <div className="text-[12px] text-[#43474e]">
-                      {menu.Breakfast.veg.side1}, {menu.Breakfast.veg.beverage}
+                      {menu?.Breakfast?.veg?.side1 || 'Chutney'}, {menu?.Breakfast?.veg?.beverage || 'Tea'}
                     </div>
                   </td>
                   <td className="py-3 px-4 align-top text-[#0d1c2e]">
                     <div className="font-semibold text-[#c05621]">
-                      {menu.Breakfast.nonVeg.mainItem}
+                      {menu?.Breakfast?.nonVeg?.mainItem || 'Egg Omelette'}
                     </div>
                     <div className="text-[12px] text-[#43474e]">
-                      {menu.Breakfast.nonVeg.side1}, {menu.Breakfast.nonVeg.beverage}
+                      {menu?.Breakfast?.nonVeg?.side1 || 'Bread'}, {menu?.Breakfast?.nonVeg?.beverage || 'Tea'}
                     </div>
                   </td>
                 </tr>
@@ -330,19 +330,19 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   <td className="py-3 px-4 align-top border-l border-[#c4c6cf]/30">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <span className="w-2 h-2 rounded-full bg-[#0a6c44]" />
-                      <span className="font-bold text-[#0a6c44]">{menu.Lunch.veg.mainItem}</span>
+                      <span className="font-bold text-[#0a6c44]">{menu?.Lunch?.veg?.mainItem || 'South Indian Meals'}</span>
                     </div>
                     <div className="text-[12px] text-[#43474e]">
-                      {menu.Lunch.veg.side1} • {menu.Lunch.veg.beverage}
+                      {menu?.Lunch?.veg?.side1 || 'Poriyal'} • {menu?.Lunch?.veg?.beverage || 'Buttermilk'}
                     </div>
                   </td>
                   <td className="py-3 px-4 align-top border-l border-[#c4c6cf]/30">
                     <div className="flex items-center gap-1.5 mb-0.5">
                       <span className="w-2 h-2 rounded-full bg-[#f47d45]" />
-                      <span className="font-bold text-[#c05621]">{menu.Lunch.nonVeg.mainItem}</span>
+                      <span className="font-bold text-[#c05621]">{menu?.Lunch?.nonVeg?.mainItem || 'Chicken Biryani'}</span>
                     </div>
                     <div className="text-[12px] text-[#43474e]">
-                      {menu.Lunch.nonVeg.side1} • {menu.Lunch.nonVeg.beverage}
+                      {menu?.Lunch?.nonVeg?.side1 || 'Raita'} • {menu?.Lunch?.nonVeg?.beverage || 'Lime Juice'}
                     </div>
                   </td>
                 </tr>
@@ -357,18 +357,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                   </td>
                   <td className="py-3 px-4 align-top text-[#0d1c2e]">
                     <div className="font-semibold text-[#0a6c44]">
-                      {menu.Dinner.veg.mainItem}
+                      {menu?.Dinner?.veg?.mainItem || 'Chapati & Dal'}
                     </div>
                     <div className="text-[12px] text-[#43474e]">
-                      {menu.Dinner.veg.side1}, {menu.Dinner.veg.beverage}
+                      {menu?.Dinner?.veg?.side1 || 'Kurma'}, {menu?.Dinner?.veg?.beverage || 'Milk'}
                     </div>
                   </td>
                   <td className="py-3 px-4 align-top text-[#0d1c2e]">
                     <div className="font-semibold text-[#c05621]">
-                      {menu.Dinner.nonVeg.mainItem}
+                      {menu?.Dinner?.nonVeg?.mainItem || 'Parotta & Chicken'}
                     </div>
                     <div className="text-[12px] text-[#43474e]">
-                      {menu.Dinner.nonVeg.side1}, {menu.Dinner.nonVeg.beverage}
+                      {menu?.Dinner?.nonVeg?.side1 || 'Salad'}, {menu?.Dinner?.nonVeg?.beverage || 'Milk'}
                     </div>
                   </td>
                 </tr>
