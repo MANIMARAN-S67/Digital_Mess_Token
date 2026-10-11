@@ -16,6 +16,7 @@ interface AuthContextType {
   authError: string | null;
   clearAuthError: () => void;
   signInWithGoogle: () => Promise<void>;
+  signInWithSalesforce: () => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
   signUpWithEmail: (email: string, pass: string, name: string) => Promise<void>;
   loginWithStudentId: (identifier: string) => Promise<void>;
@@ -184,20 +185,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           hostelRoom: 'Admin Office'
         };
         sessionStorage.setItem('mess_session_user', JSON.stringify(defaultUser));
-        
-        try {
-          await initiateSalesforceOAuth(user.email);
-        } catch (sfErr) {
-          console.warn('Salesforce redirect not triggered; entering with Firebase session:', sfErr);
-          setDbUser(defaultUser);
-        }
+        sessionStorage.setItem('firebase_email', user.email);
+        setDbUser(defaultUser);
       } else {
         throw new Error("No email found in Google account.");
       }
     } catch (error: any) {
       console.error("Google Sign In Error", error);
       if (error?.code === 'auth/configuration-not-found') {
-        setAuthError("Google Sign-In provider or API key needs activation. You can use Email/Password login or the Demo Login buttons below.");
+        setAuthError("Google Sign-In provider or API key needs activation. You can use Email/Password login or Demo Login below.");
       } else if (error?.code === 'auth/popup-closed-by-user') {
         setAuthError("Sign-in popup was closed before completing.");
       } else if (error?.code === 'auth/popup-blocked') {
@@ -205,6 +201,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         setAuthError(error?.message || "Google Login failed.");
       }
+    }
+  };
+
+  const signInWithSalesforce = async () => {
+    clearAuthError();
+    try {
+      const email = auth.currentUser?.email || 'admin@mess.org';
+      await initiateSalesforceOAuth(email);
+    } catch (err: any) {
+      setAuthError('Salesforce OAuth redirection failed: ' + (err?.message || 'Check redirect URI'));
     }
   };
 
@@ -363,6 +369,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     authError,
     clearAuthError,
     signInWithGoogle,
+    signInWithSalesforce,
     signInWithEmail,
     signUpWithEmail,
     loginWithStudentId,

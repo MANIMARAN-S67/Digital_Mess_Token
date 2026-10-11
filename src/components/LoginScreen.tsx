@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 export const LoginScreen: React.FC = () => {
   const { 
     signInWithGoogle, 
+    signInWithSalesforce,
     signInWithEmail, 
     signUpWithEmail, 
     loginWithStudentId, 
@@ -143,6 +144,17 @@ export const LoginScreen: React.FC = () => {
                 className="w-5 h-5" 
               />
               Continue with Google
+            </button>
+
+            {/* Salesforce OAuth Login Button */}
+            <button 
+              type="button" 
+              onClick={signInWithSalesforce} 
+              disabled={loading || submitting}
+              className="w-full h-10 bg-[#0176D3]/10 hover:bg-[#0176D3]/20 border border-[#0176D3]/30 text-[#0176D3] rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-2"
+            >
+              <span className="material-symbols-outlined text-[18px]">cloud</span>
+              Sign in with Salesforce Org
             </button>
 
             {/* Divider */}

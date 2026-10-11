@@ -24,7 +24,12 @@ const base64urlencode = (a: ArrayBuffer) => {
 
 const getSalesforceLoginUrl = () => import.meta.env.VITE_SALESFORCE_LOGIN_URL || 'https://login.salesforce.com';
 const getClientId = () => import.meta.env.VITE_SALESFORCE_CLIENT_ID || '3MVG944Woww2erSJzfjWjVlrcKvNLJyK52kpJq1SWAsaSnQcTTy6DCJXFTrn__Q5DKv6nv92wKrOFsCq028nu';
-const getRedirectUri = () => import.meta.env.VITE_SALESFORCE_REDIRECT_URI || `${window.location.origin}/oauth/callback`;
+const getRedirectUri = () => {
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    return `${window.location.origin}/oauth/callback`;
+  }
+  return import.meta.env.VITE_SALESFORCE_REDIRECT_URI || 'http://localhost:5173/oauth/callback';
+};
 
 export const initiateSalesforceOAuth = async (firebaseEmail: string) => {
   const codeVerifier = generateRandomString(64);
