@@ -113,6 +113,43 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     // 2. Sync with Salesforce backend if connected
     if (getSalesforceToken()) {
+      // 2A. Upsert into Mess_User__c object (tracks who is logged in and issuing tokens)
+      try {
+        const nowIso = new Date().toISOString();
+        const sfUserQuery = await sfApi.query(`SELECT Id, Name, Email__c, Role__c, Tokens_Issued_Today__c, Total_Tokens_Issued__c FROM Mess_User__c WHERE Email__c = '${email}' LIMIT 1`);
+        
+        if (sfUserQuery && sfUserQuery.records && sfUserQuery.records.length > 0) {
+          const existingMessUser = sfUserQuery.records[0];
+          userProfile.sfUserId = existingMessUser.Id;
+          await sfApi.patch(`/sobjects/Mess_User__c/${existingMessUser.Id}`, {
+            Last_Login__c: nowIso,
+            Login_Provider__c: overrides?.loginProvider || 'Google',
+            Status__c: 'Active',
+            Photo_URL__c: photoUrl || ''
+          }).catch(() => {});
+        } else {
+          const createRes = await sfApi.post('/sobjects/Mess_User__c', {
+            Name: userProfile.name,
+            Email__c: email,
+            Role__c: userProfile.role,
+            Firebase_UID__c: uid,
+            Last_Login__c: nowIso,
+            Login_Provider__c: overrides?.loginProvider || 'Google',
+            Assigned_Mess_Hall__c: userProfile.hostelRoom || 'Central Mess Hall A',
+            Status__c: 'Active',
+            Tokens_Issued_Today__c: 0,
+            Total_Tokens_Issued__c: 0,
+            Photo_URL__c: photoUrl || ''
+          }).catch(() => null);
+          if (createRes && createRes.id) {
+            userProfile.sfUserId = createRes.id;
+          }
+        }
+      } catch (sfUserErr) {
+        console.warn('Salesforce Mess_User__c sync notice:', sfUserErr);
+      }
+
+      // 2B. Query Student__c if user is a student
       try {
         const soql = `SELECT Id, Name, Student_ID__c, Department__c, Academic_Year__c, Hostel_Room__c, Diet_Preference__c, Email__c, Role__c FROM Student__c WHERE Email__c = '${email}' LIMIT 1`;
         const result = await sfApi.query(soql);
@@ -133,6 +170,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         console.warn('Salesforce student query error:', sfErr);
       }
     }
+
 
     // 3. Cache locally for immediate fast loads and offline resilience
     try {

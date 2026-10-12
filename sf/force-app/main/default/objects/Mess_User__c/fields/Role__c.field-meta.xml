@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Role__c</fullName>
+    <description>Role of the user in mess operations</description>
+    <label>Role</label>
+    <required>false</required>
+    <trackHistory>true</trackHistory>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Admin</fullName>
+                <default>true</default>
+                <label>Admin</label>
+            </value>
+            <value>
+                <fullName>Warden</fullName>
+                <default>false</default>
+                <label>Warden</label>
+            </value>
+            <value>
+                <fullName>Mess Staff</fullName>
+                <default>false</default>
+                <label>Mess Staff</label>
+            </value>
+            <value>
+                <fullName>Token Issuer</fullName>
+                <default>false</default>
+                <label>Token Issuer</label>
+            </value>
+            <value>
+                <fullName>Student</fullName>
+                <default>false</default>
+                <label>Student</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

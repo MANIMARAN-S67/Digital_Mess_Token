@@ -77,6 +77,8 @@ export interface UserProfile {
   Id: string;
   studentId: string;
   uid?: string;
+  sfUserId?: string;
+  loginProvider?: string;
   name: string;
   role: 'Admin' | 'Student' | 'Warden' | 'Mess Management';
   preference: DietPreference;
@@ -88,4 +90,5 @@ export interface UserProfile {
   lastLogin?: string;
   updatedAt?: string;
 }
+
 

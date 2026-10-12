@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Total_Tokens_Issued__c</fullName>
+    <defaultValue>0</defaultValue>
+    <description>Cumulative count of tokens issued by this operator</description>
+    <externalId>false</externalId>
+    <label>Total Tokens Issued</label>
+    <precision>10</precision>
+    <required>false</required>
+    <scale>0</scale>
+    <trackHistory>false</trackHistory>
+    <type>Number</type>
+    <unique>false</unique>
+</CustomField>

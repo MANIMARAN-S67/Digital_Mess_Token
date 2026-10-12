@@ -1,0 +1,127 @@
+<template>
+    <lightning-card title="Digital Mess - Active User &amp; Operations Dashboard" icon-name="standard:dashboard">
+        <div class="slds-p-around_medium">
+            
+            <!-- Current Logged-in User Banner -->
+            <div class="slds-box slds-theme_default slds-m-bottom_medium slds-grid slds-wrap slds-grid_vertical-align-center" style="border-left: 5px solid #002045; background: #f8f9ff;">
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_8-of-12 slds-grid slds-grid_vertical-align-center">
+                    <div class="slds-avatar slds-avatar_large slds-m-right_medium slds-avatar_circle" style="background: #002045; color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.25rem;">
+                        {userInitials}
+                    </div>
+                    <div>
+                        <div class="slds-text-heading_medium slds-text-color_default slds-text-title_bold">
+                            Welcome, {userName}
+                        </div>
+                        <div class="slds-text-body_small slds-text-color_weak slds-m-top_xx-small">
+                            <strong>Email:</strong> {userEmail} &nbsp;|&nbsp; 
+                            <strong>Profile:</strong> <span class="slds-badge slds-badge_inverse slds-m-left_xx-small">{userProfile}</span> &nbsp;|&nbsp; 
+                            <strong>Username:</strong> {userUsername}
+                        </div>
+                    </div>
+                </div>
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_4-of-12 slds-text-align_right slds-m-top_small slds-medium-m-top_none">
+                    <lightning-button label="Refresh Data" icon-name="utility:refresh" onclick={handleRefresh} class="slds-m-right_x-small"></lightning-button>
+                    <lightning-button variant="brand" label="View Full Reports" icon-name="utility:report" onclick={navigateToReports}></lightning-button>
+                </div>
+            </div>
+
+            <!-- Summary KPI Metric Cards -->
+            <div class="slds-grid slds-wrap slds-gutters slds-m-bottom_medium">
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_3-of-12 slds-m-bottom_x-small">
+                    <div class="slds-box slds-box_small slds-text-align_center" style="background: #ffffff; border-top: 4px solid #002045;">
+                        <div class="slds-text-title_caps slds-text-color_weak">Tokens Issued Today</div>
+                        <div class="slds-text-heading_large slds-m-top_x-small" style="font-weight: 800; color: #002045;">{totalTokensToday}</div>
+                    </div>
+                </div>
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_3-of-12 slds-m-bottom_x-small">
+                    <div class="slds-box slds-box_small slds-text-align_center" style="background: #ffffff; border-top: 4px solid #0a6c44;">
+                        <div class="slds-text-title_caps slds-text-color_weak">Vegetarian Meals</div>
+                        <div class="slds-text-heading_large slds-m-top_x-small" style="font-weight: 800; color: #0a6c44;">{vegCount}</div>
+                    </div>
+                </div>
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_3-of-12 slds-m-bottom_x-small">
+                    <div class="slds-box slds-box_small slds-text-align_center" style="background: #ffffff; border-top: 4px solid #c46a24;">
+                        <div class="slds-text-title_caps slds-text-color_weak">Non-Veg Meals</div>
+                        <div class="slds-text-heading_large slds-m-top_x-small" style="font-weight: 800; color: #c46a24;">{nonVegCount}</div>
+                    </div>
+                </div>
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_3-of-12 slds-m-bottom_x-small">
+                    <div class="slds-box slds-box_small slds-text-align_center" style="background: #ffffff; border-top: 4px solid #1a365d;">
+                        <div class="slds-text-title_caps slds-text-color_weak">Registered Students</div>
+                        <div class="slds-text-heading_large slds-m-top_x-small" style="font-weight: 800; color: #1a365d;">{totalStudents}</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Activity Feed Table: Tokens Issued Today -->
+            <div class="slds-card slds-card_boundary">
+                <div class="slds-card__header slds-grid">
+                    <header class="slds-media slds-media_center slds-has-flexi-truncate">
+                        <div class="slds-media__figure">
+                            <lightning-icon icon-name="custom:custom44" size="small"></lightning-icon>
+                        </div>
+                        <div class="slds-media__body">
+                            <h2 class="slds-card__header-title">
+                                <span>Recent Token Issuance Activity (Live Audit Log)</span>
+                            </h2>
+                        </div>
+                    </header>
+                </div>
+                <div class="slds-card__body slds-card__body_inner">
+                    <template if:true={hasTokens}>
+                        <div class="slds-scrollable_x">
+                            <table class="slds-table slds-table_cell-buffer slds-table_bordered slds-table_striped">
+                                <thead>
+                                    <tr class="slds-line-height_reset">
+                                        <th scope="col"><div class="slds-truncate">Token #</div></th>
+                                        <th scope="col"><div class="slds-truncate">Student Name</div></th>
+                                        <th scope="col"><div class="slds-truncate">Roll / ID</div></th>
+                                        <th scope="col"><div class="slds-truncate">Meal Session</div></th>
+                                        <th scope="col"><div class="slds-truncate">Diet</div></th>
+                                        <th scope="col"><div class="slds-truncate">Issued Time</div></th>
+                                        <th scope="col"><div class="slds-truncate">Status</div></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <template for:each={recentTokens} for:item="token">
+                                        <tr key={token.Id}>
+                                            <td>
+                                                <div class="slds-truncate">
+                                                    <strong>{token.Token_Number__c}</strong>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="slds-truncate">{token.StudentName}</div>
+                                            </td>
+                                            <td>
+                                                <div class="slds-truncate slds-text-color_weak">{token.StudentRoll}</div>
+                                            </td>
+                                            <td>
+                                                <div class="slds-truncate">{token.Meal_Type__c}</div>
+                                            </td>
+                                            <td>
+                                                <span class="slds-badge">{token.Diet_Preference__c}</span>
+                                            </td>
+                                            <td>
+                                                <div class="slds-truncate">{token.Token_Time__c}</div>
+                                            </td>
+                                            <td>
+                                                <span class="slds-badge slds-theme_success">{token.Status__c}</span>
+                                            </td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
+                    <template if:false={hasTokens}>
+                        <div class="slds-text-align_center slds-p-around_large slds-text-color_weak">
+                            No tokens issued yet today. New tokens will appear in real time here as students take meals.
+                        </div>
+                    </template>
+                </div>
+            </div>
+
+        </div>
+    </lightning-card>
+</template>

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Tracks users and mess staff who log in and issue tokens to students</description>
+    <enableActivities>true</enableActivities>
+    <enableBulkApi>true</enableBulkApi>
+    <enableHistory>true</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <enableSharing>true</enableSharing>
+    <enableStreamingApi>true</enableStreamingApi>
+    <label>Mess User</label>
+    <nameField>
+        <label>User Full Name</label>
+        <type>Text</type>
+    </nameField>
+    <pluralLabel>Mess Users</pluralLabel>
+    <sharingModel>ReadWrite</sharingModel>
+</CustomObject>

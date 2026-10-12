@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <brand>
+        <headerColor>#002045</headerColor>
+        <shouldOverrideOrgTheme>false</shouldOverrideOrgTheme>
+    </brand>
+    <description>Digital Mess Token Management Portal - Live Operations, Attendance &amp; Reporting</description>
+    <formFactors>Small</formFactors>
+    <formFactors>Large</formFactors>
+    <isNavAutoUpdateEnabled>false</isNavAutoUpdateEnabled>
+    <isNavPersonalizationDisabled>false</isNavPersonalizationDisabled>
+    <isNavTabPersistenceDisabled>false</isNavTabPersistenceDisabled>
+    <label>Digital Mess Manager</label>
+    <navType>Standard</navType>
+    <tabs>standard-home</tabs>
+    <tabs>Digital_Mess_Dashboard</tabs>
+    <tabs>Mess_User__c</tabs>
+    <tabs>Meal_Token__c</tabs>
+    <tabs>Student__c</tabs>
+    <tabs>Menu__c</tabs>
+    <tabs>Meal_Attendance__c</tabs>
+    <tabs>standard-report</tabs>
+    <tabs>standard-Dashboard</tabs>
+
+</CustomApplication>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Issued_By_User__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The Mess User who issued this meal token to the student</description>
+    <label>Issued By Mess User</label>
+    <referenceTo>Mess_User__c</referenceTo>
+    <relationshipLabel>Issued Meal Tokens</relationshipLabel>
+    <relationshipName>Issued_Meal_Tokens</relationshipName>
+    <required>false</required>
+    <trackHistory>true</trackHistory>
+    <type>Lookup</type>
+</CustomField>

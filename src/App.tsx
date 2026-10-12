@@ -296,13 +296,21 @@ export default function App() {
       }
 
       // Create Meal_Token__c in Salesforce
-      const tokenCreateRes = await sfApi.post('/sobjects/Meal_Token__c', {
+      const tokenPayload: any = {
         Student__c: student.id,
         Token_Date__c: dateStr,
         Meal_Type__c: currentMeal,
         Status__c: 'Issued',
-        Token_Time__c: timeStr
-      });
+        Token_Time__c: timeStr,
+        Diet_Preference__c: student.preference,
+        Issued_By__c: dbUser?.name || 'Mess Admin'
+      };
+
+      if (dbUser?.sfUserId) {
+        tokenPayload.Issued_By_User__c = dbUser.sfUserId;
+      }
+
+      const tokenCreateRes = await sfApi.post('/sobjects/Meal_Token__c', tokenPayload);
 
       const tokenId = tokenCreateRes.id;
       const tokenNumber = 'TKN-' + tokenId.slice(-5).toUpperCase();
@@ -311,6 +319,7 @@ export default function App() {
       await sfApi.patch(`/sobjects/Meal_Token__c/${tokenId}`, {
         Token_Number__c: tokenNumber
       });
+
       
       const updatedStudent: Student = {
         ...student,
