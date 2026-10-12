@@ -22,6 +22,16 @@ export const LoginScreen: React.FC = () => {
   const [name, setName] = useState('');
   const [studentIdInput, setStudentIdInput] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
+
+  const handleGoogleClick = async () => {
+    setIsGoogleSigningIn(true);
+    try {
+      await signInWithGoogle();
+    } finally {
+      setIsGoogleSigningIn(false);
+    }
+  };
 
   const handleEmailSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,17 +144,27 @@ export const LoginScreen: React.FC = () => {
             {/* Google Login Button */}
             <button 
               type="button" 
-              onClick={signInWithGoogle} 
-              disabled={loading || submitting}
-              className="w-full h-12 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-3 active:scale-[0.99]"
+              onClick={handleGoogleClick} 
+              disabled={loading || submitting || isGoogleSigningIn}
+              className="w-full h-12 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-xl font-bold text-sm transition-all shadow-sm flex items-center justify-center gap-3 active:scale-[0.99] disabled:opacity-70"
             >
-              <img 
-                src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" 
-                alt="Google Logo" 
-                className="w-5 h-5" 
-              />
-              Continue with Google
+              {isGoogleSigningIn ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-gray-400 border-t-gray-800 rounded-full animate-spin" />
+                  <span>Choose Google Account...</span>
+                </>
+              ) : (
+                <>
+                  <img 
+                    src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" 
+                    alt="Google Logo" 
+                    className="w-5 h-5" 
+                  />
+                  <span>Continue with Google</span>
+                </>
+              )}
             </button>
+
 
             {/* Salesforce OAuth Login Button */}
             <button 

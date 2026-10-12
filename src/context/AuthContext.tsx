@@ -1,17 +1,20 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { auth } from '../firebase/config';
+import { auth, db } from '../firebase/config';
 import { 
   GoogleAuthProvider, 
   signInWithPopup, 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  signOut as firebaseSignOut 
+  signOut as firebaseSignOut,
+  User as FirebaseUser
 } from 'firebase/auth';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { initiateSalesforceOAuth, getSalesforceToken, handleSalesforceCallback, logoutSalesforce } from '../services/salesforceAuth';
 import sfApi from '../services/salesforceApi';
+import { UserProfile } from '../types';
 
 interface AuthContextType {
-  dbUser: any | null;
+  dbUser: UserProfile | null;
   loading: boolean;
   authError: string | null;
   clearAuthError: () => void;
@@ -32,11 +35,114 @@ export const useAuth = () => {
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [dbUser, setDbUser] = useState<any | null>(null);
+  const [dbUser, setDbUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
 
   const clearAuthError = () => setAuthError(null);
+
+  /**
+   * Synchronizes user profile to Firestore backend, Salesforce (if connected),
+   * and local/session persistence to ensure profile data is never lost.
+   */
+  const syncUserProfileToBackend = async (
+    fbUser: { uid: string; email: string | null; displayName: string | null; photoURL?: string | null },
+    overrides?: Partial<UserProfile>
+  ): Promise<UserProfile | null> => {
+    if (!fbUser.email) return null;
+
+    const email = fbUser.email.trim();
+    const uid = fbUser.uid;
+    const displayName = fbUser.displayName || email.split('@')[0];
+    const photoUrl = fbUser.photoURL || '';
+
+    const lowerEmail = email.toLowerCase();
+    const isAdmin = lowerEmail.includes('admin') || lowerEmail.includes('warden') || lowerEmail.includes('secretary') || lowerEmail.includes('mess');
+    const initialRole: UserProfile['role'] = isAdmin ? 'Admin' : 'Student';
+
+    let userProfile: UserProfile = {
+      Id: uid,
+      studentId: uid,
+      uid: uid,
+      name: displayName,
+      role: initialRole,
+      preference: 'Veg',
+      email: email,
+      photoUrl: photoUrl,
+      department: isAdmin ? 'Central Mess Administration' : 'Computer Science',
+      hostelRoom: isAdmin ? 'Admin Office - Block A' : 'BH-1 / 101',
+      lastLogin: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...overrides
+    };
+
+    // 1. Sync with Firebase Firestore Backend (`users` collection)
+    try {
+      const userDocRef = doc(db, 'users', uid);
+      const userSnap = await getDoc(userDocRef);
+
+      if (userSnap.exists()) {
+        const existingData = userSnap.data() as Partial<UserProfile>;
+        userProfile = {
+          ...userProfile,
+          ...existingData,
+          email: email, // Always preserve real authenticated email
+          uid: uid,
+          Id: uid,
+          studentId: existingData.studentId || uid,
+          name: overrides?.name || existingData.name || displayName,
+          photoUrl: photoUrl || existingData.photoUrl || '',
+          lastLogin: new Date().toISOString()
+        };
+      }
+
+      // Upsert user profile to Firestore backend
+      await setDoc(userDocRef, {
+        ...userProfile,
+        email: email,
+        uid: uid,
+        displayName: userProfile.name,
+        lastLogin: serverTimestamp(),
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+
+      console.log('User profile successfully stored in backend for:', email);
+    } catch (firestoreErr) {
+      console.warn('Backend Firestore note (offline or rules fallback):', firestoreErr);
+    }
+
+    // 2. Sync with Salesforce backend if connected
+    if (getSalesforceToken()) {
+      try {
+        const soql = `SELECT Id, Name, Student_ID__c, Department__c, Academic_Year__c, Hostel_Room__c, Diet_Preference__c, Email__c, Role__c FROM Student__c WHERE Email__c = '${email}' LIMIT 1`;
+        const result = await sfApi.query(soql);
+        if (result && result.records && result.records.length > 0) {
+          const student = result.records[0];
+          userProfile = {
+            ...userProfile,
+            studentId: student.Student_ID__c || student.Id,
+            name: student.Name || userProfile.name,
+            role: (student.Role__c as UserProfile['role']) || 'Student',
+            preference: student.Diet_Preference__c || userProfile.preference,
+            department: student.Department__c || userProfile.department,
+            hostelRoom: student.Hostel_Room__c || userProfile.hostelRoom,
+            email: student.Email__c || email
+          };
+        }
+      } catch (sfErr) {
+        console.warn('Salesforce student query error:', sfErr);
+      }
+    }
+
+    // 3. Cache locally for immediate fast loads and offline resilience
+    try {
+      localStorage.setItem(`mess_user_profile_${uid}`, JSON.stringify(userProfile));
+      sessionStorage.setItem('mess_session_user', JSON.stringify(userProfile));
+      sessionStorage.setItem('firebase_email', email);
+    } catch (e) {}
+
+    return userProfile;
+  };
 
   const fetchSalesforceUser = async (email: string) => {
     try {
@@ -45,23 +151,25 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       
       if (result && result.records && result.records.length > 0) {
         const student = result.records[0];
-        setDbUser({
-          ...student,
-          role: student.Role__c || 'Student',
-          studentId: student.Id,
+        const profile: UserProfile = {
+          Id: student.Id,
+          studentId: student.Student_ID__c || student.Id,
           name: student.Name,
+          role: (student.Role__c as UserProfile['role']) || 'Student',
           preference: student.Diet_Preference__c || 'Veg',
           email: student.Email__c,
           department: student.Department__c,
           hostelRoom: student.Hostel_Room__c
-        });
+        };
+        sessionStorage.setItem('mess_session_user', JSON.stringify(profile));
+        setDbUser(profile);
       } else {
-        // User not found in Student__c: Check if authenticated user is an Admin in Salesforce
+        // Check Salesforce User table by email
         try {
           const sfUserRes = await sfApi.query(`SELECT Id, Name, Email FROM User WHERE Email = '${email}' LIMIT 1`);
           if (sfUserRes && sfUserRes.records && sfUserRes.records.length > 0) {
             const sfUser = sfUserRes.records[0];
-            setDbUser({
+            const profile: UserProfile = {
               Id: sfUser.Id,
               studentId: sfUser.Id,
               name: sfUser.Name || auth.currentUser?.displayName || 'Mess Admin',
@@ -70,38 +178,43 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               email: sfUser.Email || email,
               department: 'Mess Management',
               hostelRoom: 'Admin Office'
-            });
+            };
+            sessionStorage.setItem('mess_session_user', JSON.stringify(profile));
+            setDbUser(profile);
             return;
           }
         } catch (uErr) {
           console.warn('Could not query Salesforce User table by email:', uErr);
         }
 
-        // If authenticated with Salesforce, grant Mess Admin role
-        setDbUser({
-          Id: 'admin-' + Date.now(),
-          studentId: 'admin-' + Date.now(),
+        const profile: UserProfile = {
+          Id: auth.currentUser?.uid || 'admin-' + Date.now(),
+          studentId: auth.currentUser?.uid || 'admin-' + Date.now(),
           name: auth.currentUser?.displayName || 'Mess Admin',
           role: 'Admin',
           preference: 'Veg',
           email: email,
           department: 'Mess Management',
           hostelRoom: 'Admin Office'
-        });
+        };
+        sessionStorage.setItem('mess_session_user', JSON.stringify(profile));
+        setDbUser(profile);
       }
     } catch (error: any) {
       console.error('Failed to fetch user from Salesforce:', error);
-      // Fallback to local session
-      setDbUser({
-        Id: 'user-' + Date.now(),
-        studentId: 'user-' + Date.now(),
+      const fallbackUid = auth.currentUser?.uid || 'user-' + Date.now();
+      const profile: UserProfile = {
+        Id: fallbackUid,
+        studentId: fallbackUid,
         name: auth.currentUser?.displayName || email.split('@')[0],
         role: 'Admin',
         preference: 'Veg',
         email: email,
         department: 'Mess Administration',
         hostelRoom: 'Room 101'
-      });
+      };
+      sessionStorage.setItem('mess_session_user', JSON.stringify(profile));
+      setDbUser(profile);
     }
   };
 
@@ -115,13 +228,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         try {
           await handleSalesforceCallback(code);
           window.history.replaceState({}, document.title, '/');
-          const email = sessionStorage.getItem('firebase_email');
+          const email = sessionStorage.getItem('firebase_email') || auth.currentUser?.email;
           if (email) {
             await fetchSalesforceUser(email);
-          } else {
-             if (auth.currentUser && auth.currentUser.email) {
-                await fetchSalesforceUser(auth.currentUser.email);
-             }
           }
         } catch (error: any) {
           setAuthError('Salesforce authentication failed: ' + (error?.message || 'Unknown error'));
@@ -133,28 +242,51 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       const sfToken = getSalesforceToken();
       
-      const unsubscribe = auth.onAuthStateChanged(async (user) => {
-        if (user && sfToken) {
-          await fetchSalesforceUser(user.email || '');
-        } else if (user) {
-          // Firebase signed in but Salesforce OAuth not yet completed:
-          // Check if user is already saved in session
+      const unsubscribe = auth.onAuthStateChanged(async (firebaseUser: FirebaseUser | null) => {
+        if (firebaseUser && firebaseUser.email) {
+          try {
+            if (sfToken) {
+              await fetchSalesforceUser(firebaseUser.email);
+            } else {
+              // Sync / restore profile from backend Firestore
+              const profile = await syncUserProfileToBackend({
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                displayName: firebaseUser.displayName,
+                photoURL: firebaseUser.photoURL
+              });
+              if (profile) {
+                setDbUser(profile);
+              }
+            }
+          } catch (e) {
+            console.error('Failed to restore user from backend:', e);
+            // Fallback from session cache
+            const savedUser = sessionStorage.getItem('mess_session_user');
+            if (savedUser) {
+              try {
+                setDbUser(JSON.parse(savedUser));
+              } catch (parseErr) {
+                setDbUser(null);
+              }
+            }
+          }
+        } else {
+          // If no Firebase user, check if demo or roll number user is logged in
           const savedUser = sessionStorage.getItem('mess_session_user');
           if (savedUser) {
             try {
-              setDbUser(JSON.parse(savedUser));
+              const parsed = JSON.parse(savedUser);
+              if (parsed.Id?.startsWith('demo-') || parsed.Id?.startsWith('STU-')) {
+                setDbUser(parsed);
+              } else {
+                setDbUser(null);
+              }
             } catch (e) {
-              setDbUser({
-                Id: user.uid,
-                studentId: user.uid,
-                name: user.displayName || user.email?.split('@')[0] || 'User',
-                role: 'Admin',
-                preference: 'Veg',
-                email: user.email || '',
-                department: 'Dining Services',
-                hostelRoom: 'Office'
-              });
+              setDbUser(null);
             }
+          } else {
+            setDbUser(null);
           }
         }
         setLoading(false);
@@ -170,23 +302,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     clearAuthError();
     try {
       const provider = new GoogleAuthProvider();
+      // CRITICAL: Forces Google to display the account chooser list ("Choose an account")
+      // allowing the user to select which email to log in with, instead of silently reusing previous
+      provider.setCustomParameters({
+        prompt: 'select_account'
+      });
+
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       
       if (user.email) {
-        const defaultUser = {
-          Id: user.uid,
-          studentId: user.uid,
-          name: user.displayName || user.email.split('@')[0],
-          role: 'Admin',
-          preference: 'Veg',
+        // Store and synchronize profile in backend
+        const profile = await syncUserProfileToBackend({
+          uid: user.uid,
           email: user.email,
-          department: 'Mess Management',
-          hostelRoom: 'Admin Office'
-        };
-        sessionStorage.setItem('mess_session_user', JSON.stringify(defaultUser));
-        sessionStorage.setItem('firebase_email', user.email);
-        setDbUser(defaultUser);
+          displayName: user.displayName,
+          photoURL: user.photoURL
+        });
+
+        if (profile) {
+          setDbUser(profile);
+        } else {
+          const fallback: UserProfile = {
+            Id: user.uid,
+            studentId: user.uid,
+            name: user.displayName || user.email.split('@')[0],
+            role: 'Admin',
+            preference: 'Veg',
+            email: user.email,
+            department: 'Mess Management',
+            hostelRoom: 'Admin Office'
+          };
+          sessionStorage.setItem('mess_session_user', JSON.stringify(fallback));
+          setDbUser(fallback);
+        }
       } else {
         throw new Error("No email found in Google account.");
       }
@@ -195,9 +344,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (error?.code === 'auth/configuration-not-found') {
         setAuthError("Google Sign-In provider or API key needs activation. You can use Email/Password login or Demo Login below.");
       } else if (error?.code === 'auth/popup-closed-by-user') {
-        setAuthError("Sign-in popup was closed before completing.");
+        setAuthError("Sign-in was cancelled (popup closed). Click again to choose an account.");
       } else if (error?.code === 'auth/popup-blocked') {
-        setAuthError("Popup blocked by browser. Please allow popups for this site.");
+        setAuthError("Popup blocked by browser. Please allow popups for this site and try again.");
       } else {
         setAuthError(error?.message || "Google Login failed.");
       }
@@ -219,18 +368,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
       const u = cred.user;
-      const userObj = {
-        Id: u.uid,
-        studentId: u.uid,
-        name: u.displayName || u.email?.split('@')[0] || 'User',
-        role: u.email?.toLowerCase().includes('admin') || u.email?.toLowerCase().includes('warden') ? 'Admin' : 'Student',
-        preference: 'Veg',
-        email: u.email || '',
-        department: 'Hostel Resident',
-        hostelRoom: 'Room 201'
-      };
-      sessionStorage.setItem('mess_session_user', JSON.stringify(userObj));
-      setDbUser(userObj);
+      const isAdmin = u.email?.toLowerCase().includes('admin') || u.email?.toLowerCase().includes('warden');
+      const profile = await syncUserProfileToBackend({
+        uid: u.uid,
+        email: u.email,
+        displayName: u.displayName
+      }, {
+        role: isAdmin ? 'Admin' : 'Student',
+        department: isAdmin ? 'Central Mess Administration' : 'Hostel Resident',
+        hostelRoom: isAdmin ? 'Admin Office' : 'Room 201'
+      });
+
+      if (profile) {
+        setDbUser(profile);
+      }
     } catch (err: any) {
       console.error('Email sign in error:', err);
       if (err?.code === 'auth/user-not-found' || err?.code === 'auth/invalid-credential') {
@@ -249,18 +400,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
       const u = cred.user;
-      const userObj = {
-        Id: u.uid,
-        studentId: u.uid,
+      const profile = await syncUserProfileToBackend({
+        uid: u.uid,
+        email: u.email,
+        displayName: name.trim() || u.displayName
+      }, {
         name: name.trim() || u.email?.split('@')[0] || 'Student',
         role: 'Student',
-        preference: 'Veg',
-        email: u.email || '',
         department: 'Computer Science',
         hostelRoom: 'BH-1 / 101'
-      };
-      sessionStorage.setItem('mess_session_user', JSON.stringify(userObj));
-      setDbUser(userObj);
+      });
+
+      if (profile) {
+        setDbUser(profile);
+      }
     } catch (err: any) {
       console.error('Email sign up error:', err);
       setAuthError(err?.message || "Registration failed.");
@@ -283,8 +436,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const res = await sfApi.query(soql);
         if (res && res.records && res.records.length > 0) {
           const s = res.records[0];
-          const studentUser = {
-            ...s,
+          const studentUser: UserProfile = {
             Id: s.Id,
             studentId: s.Id,
             name: s.Name,
@@ -304,7 +456,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
 
     // Direct student session
-    const studentUser = {
+    const studentUser: UserProfile = {
       Id: 'STU-' + cleanId,
       studentId: cleanId,
       name: `Student (${cleanId})`,
@@ -320,13 +472,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const loginAsDemoUser = (role: 'Admin' | 'Student' = 'Admin') => {
     clearAuthError();
-    const demoUser = role === 'Admin' ? {
+    const demoUser: UserProfile = role === 'Admin' ? {
       Id: 'demo-admin-01',
       studentId: 'demo-admin-01',
-      Name: 'Dr. Ramesh Kumar (Warden)',
       name: 'Dr. Ramesh Kumar (Warden)',
       role: 'Admin',
-      Role__c: 'Admin',
       preference: 'Veg',
       email: 'warden@mess.institution.edu',
       department: 'Central Mess Administration',
@@ -334,10 +484,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } : {
       Id: '21CS1004',
       studentId: '21CS1004',
-      Name: 'Rahul Sharma',
       name: 'Rahul Sharma',
       role: 'Student',
-      Role__c: 'Student',
       preference: 'Non-Veg',
       email: 'rahul.sharma@institution.edu',
       department: 'Computer Science',
@@ -359,7 +507,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     clearAuthError();
   };
 
-  const verifyOtp = async (email: string, otp: string) => {
+  const verifyOtp = async (_email: string, _otp: string) => {
     return Promise.resolve();
   };
 
@@ -380,3 +528,4 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
 };
+

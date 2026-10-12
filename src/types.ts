@@ -72,3 +72,20 @@ export interface DailyStats {
     heightPercent: number;
   }[];
 }
+
+export interface UserProfile {
+  Id: string;
+  studentId: string;
+  uid?: string;
+  name: string;
+  role: 'Admin' | 'Student' | 'Warden' | 'Mess Management';
+  preference: DietPreference;
+  email: string;
+  photoUrl?: string;
+  department?: string;
+  hostelRoom?: string;
+  phone?: string;
+  lastLogin?: string;
+  updatedAt?: string;
+}
+

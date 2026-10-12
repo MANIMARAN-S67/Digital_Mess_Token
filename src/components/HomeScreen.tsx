@@ -1,6 +1,7 @@
 import React from 'react';
 import { DailyMenu, DailyStats, MealType, TokenIssuanceLog } from '../types';
 import { NavTab } from './BottomNavBar';
+import { useAuth } from '../context/AuthContext';
 
 interface HomeScreenProps {
   currentMeal: MealType;
@@ -23,6 +24,18 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onOpenRegisterStudent,
   onSelectStudentForIssue
 }) => {
+  const { dbUser, signOut } = useAuth();
+  const userName = dbUser?.name || 'Administrator';
+  const userEmail = dbUser?.email || 'admin@institution.edu';
+  const userRole = dbUser?.role || 'Admin';
+  const initials = userName
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase() || 'AD';
+
   const mealSessionTimes: Record<MealType, { time: string; remaining: string }> = {
     Breakfast: { time: '07:30 AM - 09:30 AM', remaining: 'Ended' },
     Lunch: { time: '12:30 PM - 02:30 PM', remaining: 'Ends in 45 mins' },
@@ -35,15 +48,66 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
   return (
     <div className="flex-1 w-full max-w-[1200px] mx-auto px-4 py-4 pb-28 md:pb-12">
-      {/* Welcome Section */}
-      <section className="mt-2 mb-6">
-        <h2 className="text-[24px] font-semibold text-[#0d1c2e] tracking-tight">
-          Welcome back, Admin
-        </h2>
-        <p className="text-[15px] text-[#43474e] mt-0.5">
-          Manage daily mess operations efficiently.
-        </p>
+      {/* Welcome Section & Active User Identity Card */}
+      <section className="mt-2 mb-6 bg-white border border-[#c4c6cf]/80 rounded-2xl p-4 sm:p-5 shadow-xs relative overflow-hidden">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 sm:gap-4 min-w-0">
+            {dbUser?.photoUrl ? (
+              <img
+                src={dbUser.photoUrl}
+                alt={userName}
+                className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl object-cover ring-2 ring-[#002045]/20 shadow-xs shrink-0"
+              />
+            ) : (
+              <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-[#002045] text-white flex items-center justify-center font-extrabold text-[18px] sm:text-[20px] shadow-xs shrink-0">
+                {initials}
+              </div>
+            )}
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h2 className="text-[20px] sm:text-[23px] font-bold text-[#0d1c2e] tracking-tight truncate">
+                  Welcome back, {userName}
+                </h2>
+                <span className="px-2 py-0.5 bg-[#9ff5c1] text-[#005231] text-[10px] font-bold uppercase rounded-md shrink-0">
+                  {userRole}
+                </span>
+              </div>
+              <p className="text-[13px] text-[#43474e] mt-0.5 flex items-center gap-2 flex-wrap">
+                <span>Account:</span>
+                <span className="font-semibold text-[#002045] bg-[#eff4ff] px-2 py-0.5 rounded text-[12px] font-mono truncate">
+                  {userEmail}
+                </span>
+                <span className="hidden sm:inline text-gray-300">•</span>
+                <span className="hidden sm:inline text-[#74777f] text-[12px]">
+                  {dbUser?.department || 'Mess Management'}
+                </span>
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Profile Actions */}
+          <div className="flex items-center gap-2 ml-auto sm:ml-0">
+            <button
+              onClick={() => onChangeTab('reports')}
+              type="button"
+              className="px-3 py-2 bg-[#eff4ff] hover:bg-[#dce9ff] text-[#002045] rounded-xl text-[12px] font-bold transition-all flex items-center gap-1.5 active:scale-95 border border-[#c4c6cf]/60"
+            >
+              <span className="material-symbols-outlined text-[17px]">bar_chart</span>
+              <span className="hidden xs:inline">Stats</span>
+            </button>
+            <button
+              onClick={() => signOut()}
+              type="button"
+              className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-[12px] font-bold transition-all flex items-center gap-1.5 active:scale-95 shadow-xs"
+            >
+              <span className="material-symbols-outlined text-[17px]">logout</span>
+              <span>Logout</span>
+            </button>
+          </div>
+        </div>
       </section>
+
+
 
       {/* Current Status Card */}
       <section className="mb-6">
