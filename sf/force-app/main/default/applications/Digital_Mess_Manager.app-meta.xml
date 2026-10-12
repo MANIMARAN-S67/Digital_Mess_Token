@@ -5,9 +5,8 @@
         <shouldOverrideOrgTheme>false</shouldOverrideOrgTheme>
     </brand>
     <description>Digital Mess Token Management Portal - Live Operations, Attendance &amp; Reporting</description>
-    <formFactors>Small</formFactors>
     <formFactors>Large</formFactors>
-    <isNavAutoUpdateEnabled>false</isNavAutoUpdateEnabled>
+    <formFactors>Small</formFactors>
     <isNavPersonalizationDisabled>false</isNavPersonalizationDisabled>
     <isNavTabPersistenceDisabled>false</isNavTabPersistenceDisabled>
     <label>Digital Mess Manager</label>
@@ -21,5 +20,5 @@
     <tabs>Meal_Attendance__c</tabs>
     <tabs>standard-report</tabs>
     <tabs>standard-Dashboard</tabs>
-
+    <uiType>Lightning</uiType>
 </CustomApplication>

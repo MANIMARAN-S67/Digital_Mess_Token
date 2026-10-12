@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Can_Issue_Tokens__c</fullName>
+    <defaultValue>true</defaultValue>
+    <description>Indicates whether this user has permission to issue tokens to students</description>
+    <label>Can Issue Tokens</label>
+    <trackHistory>true</trackHistory>
+    <type>Checkbox</type>
+</CustomField>

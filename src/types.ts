@@ -56,6 +56,9 @@ export interface TokenIssuanceLog {
   dietPreference: DietPreference;
   status: 'Issued' | 'Declined';
   declineReason?: string;
+  issuedByName?: string;
+  issuedByEmail?: string;
+  issuedByUserId?: string;
 }
 
 export interface DailyStats {
@@ -91,4 +94,19 @@ export interface UserProfile {
   updatedAt?: string;
 }
 
-
+export interface MessUserRecord {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  department?: string;
+  phone?: string;
+  status?: string;
+  lastLogin?: string;
+  loginProvider?: string;
+  tokensIssuedToday?: number;
+  totalTokensIssued?: number;
+  lastTokenIssuedAt?: string;
+  canIssueTokens?: boolean;
+  isActive?: boolean;
+}

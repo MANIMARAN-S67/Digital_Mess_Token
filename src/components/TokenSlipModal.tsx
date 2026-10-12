@@ -8,6 +8,7 @@ interface TokenSlipModalProps {
   mealType: MealType;
   tokenNumber: string;
   issuedAt: string;
+  issuedByName?: string;
 }
 
 export const TokenSlipModal: React.FC<TokenSlipModalProps> = ({
@@ -16,7 +17,8 @@ export const TokenSlipModal: React.FC<TokenSlipModalProps> = ({
   student,
   mealType,
   tokenNumber,
-  issuedAt
+  issuedAt,
+  issuedByName
 }) => {
   if (!isOpen || !student) return null;
 
@@ -86,6 +88,13 @@ export const TokenSlipModal: React.FC<TokenSlipModalProps> = ({
             <div className="flex justify-between">
               <span className="text-[#74777f]">Timestamp:</span>
               <span className="text-[#0d1c2e] font-mono">{issuedAt}</span>
+            </div>
+            <div className="flex justify-between items-center pt-1 border-t border-[#c4c6cf]/40">
+              <span className="text-[#74777f]">Issued By:</span>
+              <span className="text-[#002045] font-bold flex items-center gap-1">
+                <span className="material-symbols-outlined text-[14px] text-[#0a6c44]">verified_user</span>
+                {issuedByName || 'Mess Counter Staff'}
+              </span>
             </div>
           </div>
 

@@ -125,6 +125,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             Last_Login__c: nowIso,
             Login_Provider__c: overrides?.loginProvider || 'Google',
             Status__c: 'Active',
+            Is_Currently_Active__c: true,
             Photo_URL__c: photoUrl || ''
           }).catch(() => {});
         } else {
@@ -137,6 +138,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             Login_Provider__c: overrides?.loginProvider || 'Google',
             Assigned_Mess_Hall__c: userProfile.hostelRoom || 'Central Mess Hall A',
             Status__c: 'Active',
+            Is_Currently_Active__c: true,
+            Can_Issue_Tokens__c: true,
+            Total_Logins__c: 1,
             Tokens_Issued_Today__c: 0,
             Total_Tokens_Issued__c: 0,
             Photo_URL__c: photoUrl || ''
@@ -535,6 +539,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signOut = async () => {
+    if (dbUser?.sfUserId && getSalesforceToken()) {
+      sfApi.patch(`/sobjects/Mess_User__c/${dbUser.sfUserId}`, {
+        Is_Currently_Active__c: false
+      }).catch(() => {});
+    }
     try {
       await firebaseSignOut(auth);
     } catch (e) {}
