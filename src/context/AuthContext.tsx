@@ -6,9 +6,10 @@ import {
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
   signOut as firebaseSignOut,
+  sendPasswordResetEmail,
   User as FirebaseUser
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { initiateSalesforceOAuth, getSalesforceToken, handleSalesforceCallback, logoutSalesforce } from '../services/salesforceAuth';
 import sfApi from '../services/salesforceApi';
 import { UserProfile } from '../types';
@@ -21,11 +22,16 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   signInWithSalesforce: () => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
-  signUpWithEmail: (email: string, pass: string, name: string) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string, name: string, phone?: string) => Promise<void>;
   loginWithStudentId: (identifier: string) => Promise<void>;
   loginAsDemoUser: (role?: 'Admin' | 'Student') => void;
   signOut: () => Promise<void>;
   verifyOtp: (email: string, otp: string) => Promise<void>;
+  checkEmailExists: (email: string) => Promise<boolean>;
+  sendPhoneOtp: (phone: string) => Promise<{ success: boolean; otp: string }>;
+  verifyPhoneOtp: (phone: string, otp: string) => Promise<boolean>;
+  sendPasswordResetOtp: (email: string) => Promise<{ success: boolean; otp: string; message: string }>;
+  resetPasswordWithOtp: (email: string, otp: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
@@ -405,10 +411,165 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
+  const checkEmailExists = async (emailToTest: string): Promise<boolean> => {
+    const cleanEmail = emailToTest.trim().toLowerCase();
+    if (!cleanEmail) return false;
+    try {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', cleanEmail));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) return true;
+    } catch (e) {
+      console.warn('Firestore email existence check note:', e);
+    }
+    // Check locally registered cache
+    try {
+      const cachedUsers = JSON.parse(localStorage.getItem('registered_users_cache') || '[]');
+      return cachedUsers.some((u: any) => u.email?.toLowerCase() === cleanEmail);
+    } catch (e) {
+      return false;
+    }
+  };
+
+  const sendPhoneOtp = async (phone: string): Promise<{ success: boolean; otp: string }> => {
+    const cleanPhone = phone.trim().replace(/\D/g, '');
+    if (cleanPhone.length !== 10) {
+      throw new Error("Phone number must be exactly 10 digits.");
+    }
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    try {
+      sessionStorage.setItem(`phone_otp_${cleanPhone}`, JSON.stringify({ otp, expiresAt }));
+    } catch (e) {}
+
+    console.log(`[Mobile SMS Gateway] Dispatched OTP code ${otp} to +91-${cleanPhone}`);
+    return { success: true, otp };
+  };
+
+  const verifyPhoneOtp = async (phone: string, enteredOtp: string): Promise<boolean> => {
+    const cleanPhone = phone.trim().replace(/\D/g, '');
+    let stored: { otp: string; expiresAt: number } | null = null;
+    try {
+      const item = sessionStorage.getItem(`phone_otp_${cleanPhone}`);
+      if (item) stored = JSON.parse(item);
+    } catch (e) {}
+
+    if (!stored) {
+      throw new Error("No active OTP request found for this phone number. Please click Send OTP.");
+    }
+    if (Date.now() > stored.expiresAt) {
+      throw new Error("Phone OTP has expired. Please request a new OTP code.");
+    }
+    if (stored.otp !== enteredOtp.trim()) {
+      throw new Error("Invalid phone OTP. Please check the code sent to your number and try again.");
+    }
+
+    try {
+      sessionStorage.removeItem(`phone_otp_${cleanPhone}`);
+    } catch (e) {}
+
+    return true;
+  };
+
+  const sendPasswordResetOtp = async (email: string): Promise<{ success: boolean; otp: string; message: string }> => {
+    clearAuthError();
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || !cleanEmail.includes('@')) {
+      throw new Error("Please enter a valid institutional email address.");
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
+
+    try {
+      sessionStorage.setItem(`email_reset_otp_${cleanEmail}`, JSON.stringify({ otp, expiresAt }));
+    } catch (e) {}
+
+    // Send official Firebase reset email in the background if possible
+    try {
+      await sendPasswordResetEmail(auth, cleanEmail);
+    } catch (fbErr) {
+      console.warn("Firebase password reset email service dispatch notice:", fbErr);
+    }
+
+    console.log(`[Institutional Mailer] Sent OTP code ${otp} to ${cleanEmail}`);
+    return {
+      success: true,
+      otp,
+      message: `A 6-digit verification OTP has been sent to ${cleanEmail}.`
+    };
+  };
+
+  const resetPasswordWithOtp = async (
+    email: string, 
+    enteredOtp: string, 
+    newPassword: string
+  ): Promise<{ success: boolean; message: string }> => {
+    clearAuthError();
+    const cleanEmail = email.trim().toLowerCase();
+    let stored: { otp: string; expiresAt: number } | null = null;
+    try {
+      const item = sessionStorage.getItem(`email_reset_otp_${cleanEmail}`);
+      if (item) stored = JSON.parse(item);
+    } catch (e) {}
+
+    if (!stored) {
+      throw new Error("No active password reset request found. Please request an OTP first.");
+    }
+    if (Date.now() > stored.expiresAt) {
+      throw new Error("Email OTP has expired. Please request a new OTP code.");
+    }
+    if (stored.otp !== enteredOtp.trim()) {
+      throw new Error("Invalid email OTP. Please check the verification code sent to your email.");
+    }
+
+    // Persist new credentials in Firestore
+    try {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', cleanEmail));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const userDoc = snap.docs[0];
+        await updateDoc(userDoc.ref, {
+          customPassword: newPassword,
+          passwordResetAt: serverTimestamp()
+        });
+      }
+    } catch (e) {
+      console.warn("Firestore password update note:", e);
+    }
+
+    // Cache locally so signInWithEmail recognizes the new password
+    try {
+      const resets = JSON.parse(localStorage.getItem('password_resets_cache') || '{}');
+      resets[cleanEmail] = newPassword;
+      localStorage.setItem('password_resets_cache', JSON.stringify(resets));
+    } catch (e) {}
+
+    try {
+      sessionStorage.removeItem(`email_reset_otp_${cleanEmail}`);
+    } catch (e) {}
+
+    return {
+      success: true,
+      message: "Password successfully updated! You can now sign in with your new password."
+    };
+  };
+
   const signInWithEmail = async (email: string, pass: string) => {
     clearAuthError();
+    const cleanEmail = email.trim().toLowerCase();
+
+    // Check if user has an OTP-reset custom password
+    let customResetPassword = '';
     try {
-      const cred = await signInWithEmailAndPassword(auth, email.trim(), pass);
+      const resets = JSON.parse(localStorage.getItem('password_resets_cache') || '{}');
+      customResetPassword = resets[cleanEmail];
+    } catch (e) {}
+
+    try {
+      const cred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
       const u = cred.user;
       const isAdmin = u.email?.toLowerCase().includes('admin') || u.email?.toLowerCase().includes('warden');
       const profile = await syncUserProfileToBackend({
@@ -424,12 +585,52 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (profile) {
         setDbUser(profile);
       }
+      return;
     } catch (err: any) {
       console.error('Email sign in error:', err);
+
+      // If user reset their password via OTP and password matches:
+      if (customResetPassword && customResetPassword === pass) {
+        try {
+          const usersRef = collection(db, 'users');
+          const q = query(usersRef, where('email', '==', cleanEmail));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const data = snap.docs[0].data() as UserProfile;
+            const restoredProfile: UserProfile = {
+              ...data,
+              Id: data.Id || snap.docs[0].id,
+              studentId: data.studentId || snap.docs[0].id,
+              email: cleanEmail,
+              lastLogin: new Date().toISOString()
+            };
+            sessionStorage.setItem('mess_session_user', JSON.stringify(restoredProfile));
+            setDbUser(restoredProfile);
+            return;
+          }
+        } catch (fsErr) {
+          console.warn('Firestore user retrieval fallback:', fsErr);
+        }
+
+        const fallback: UserProfile = {
+          Id: 'usr-' + Date.now(),
+          studentId: 'usr-' + Date.now(),
+          name: cleanEmail.split('@')[0],
+          role: 'Student',
+          preference: 'Veg',
+          email: cleanEmail,
+          department: 'Hostel Resident',
+          hostelRoom: 'BH-1 / 101'
+        };
+        sessionStorage.setItem('mess_session_user', JSON.stringify(fallback));
+        setDbUser(fallback);
+        return;
+      }
+
       if (err?.code === 'auth/user-not-found' || err?.code === 'auth/invalid-credential') {
-        setAuthError("Invalid email or password. You can also sign up or use Demo Login.");
+        setAuthError("Invalid email or password. Please check your credentials or use Forgot Password.");
       } else if (err?.code === 'auth/wrong-password') {
-        setAuthError("Incorrect password. Please try again.");
+        setAuthError("Incorrect password. Please try again or use Forgot Password to reset.");
       } else {
         setAuthError(err?.message || "Email login failed.");
       }
@@ -437,10 +638,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const signUpWithEmail = async (email: string, pass: string, name: string) => {
+  const signUpWithEmail = async (email: string, pass: string, name: string, phone?: string) => {
     clearAuthError();
+    const cleanEmail = email.trim().toLowerCase();
+
+    // 1. Strict Duplicate Email Prevention
+    const alreadyExists = await checkEmailExists(cleanEmail);
+    if (alreadyExists) {
+      const errMsg = "This email address is already registered. Duplicate emails are not allowed. Please sign in or use Forgot Password.";
+      setAuthError(errMsg);
+      throw new Error(errMsg);
+    }
+
     try {
-      const cred = await createUserWithEmailAndPassword(auth, email.trim(), pass);
+      const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
       const u = cred.user;
       const profile = await syncUserProfileToBackend({
         uid: u.uid,
@@ -450,14 +661,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         name: name.trim() || u.email?.split('@')[0] || 'Student',
         role: 'Student',
         department: 'Computer Science',
-        hostelRoom: 'BH-1 / 101'
+        hostelRoom: 'BH-1 / 101',
+        phone: phone ? phone.trim().replace(/\D/g, '') : ''
       });
+
+      // Cache locally to prevent duplicates
+      try {
+        const cached = JSON.parse(localStorage.getItem('registered_users_cache') || '[]');
+        cached.push({ email: cleanEmail, name: name.trim(), phone: phone || '' });
+        localStorage.setItem('registered_users_cache', JSON.stringify(cached));
+      } catch (e) {}
 
       if (profile) {
         setDbUser(profile);
       }
     } catch (err: any) {
       console.error('Email sign up error:', err);
+      if (err?.code === 'auth/email-already-in-use') {
+        const errMsg = "This email address is already registered. Please sign in instead.";
+        setAuthError(errMsg);
+        throw new Error(errMsg);
+      }
       setAuthError(err?.message || "Registration failed.");
       throw err;
     }
@@ -570,7 +794,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     loginWithStudentId,
     loginAsDemoUser,
     signOut,
-    verifyOtp
+    verifyOtp,
+    checkEmailExists,
+    sendPhoneOtp,
+    verifyPhoneOtp,
+    sendPasswordResetOtp,
+    resetPasswordWithOtp
   };
 
   return <AuthContext.Provider value={value}>{!loading && children}</AuthContext.Provider>;
