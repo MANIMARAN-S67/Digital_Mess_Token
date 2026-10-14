@@ -6,12 +6,14 @@ interface DesktopSideNavProps {
   currentTab: NavTab;
   onChangeTab: (tab: NavTab) => void;
   onOpenQuickIssue: () => void;
+  onOpenBackendInspector?: () => void;
 }
 
 export const DesktopSideNav: React.FC<DesktopSideNavProps> = ({
   currentTab,
   onChangeTab,
-  onOpenQuickIssue
+  onOpenQuickIssue,
+  onOpenBackendInspector
 }) => {
   const { dbUser, signOut } = useAuth();
 
@@ -74,14 +76,24 @@ export const DesktopSideNav: React.FC<DesktopSideNavProps> = ({
         })}
 
         {/* Quick Action Button in Sidebar */}
-        <div className="mt-4 pt-3 border-t border-[#c4c6cf]/40 px-1">
+        <div className="mt-4 pt-3 border-t border-[#c4c6cf]/40 px-1 space-y-2">
           <button
             onClick={onOpenQuickIssue}
-            className="w-full h-10 bg-[#002045] hover:bg-[#1a365d] text-white text-[13px] font-semibold rounded-lg flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98"
+            className="w-full h-10 bg-[#002045] hover:bg-[#1a365d] text-white text-[13px] font-semibold rounded-lg flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98 cursor-pointer"
           >
             <span className="material-symbols-outlined text-[18px]">qr_code_scanner</span>
             Fast Scan / Issue
           </button>
+
+          {onOpenBackendInspector && (
+            <button
+              onClick={onOpenBackendInspector}
+              className="w-full h-10 bg-emerald-50 hover:bg-emerald-100 text-[#005231] border border-emerald-300 text-[13px] font-semibold rounded-lg flex items-center justify-center gap-2 shadow-xs transition-all active:scale-98 cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[18px]">database</span>
+              Backend Database
+            </button>
+          )}
         </div>
       </div>
 

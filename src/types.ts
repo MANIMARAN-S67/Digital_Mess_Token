@@ -5,6 +5,7 @@ export type TokenStatus = 'Issued' | 'Declined' | 'Already Issued' | 'Cancelled'
 export interface Student {
   id: string; // e.g. "21CS1004"
   name: string; // e.g. "Rahul Sharma"
+  academicYear?: string; // e.g. "1st Year", "2nd Year", "3rd Year", "4th Year"
   department: string; // e.g. "Computer Science"
   hostelRoom: string; // e.g. "BH-3 / 214"
   preference: DietPreference; // "Non-Veg" | "Veg"
@@ -12,6 +13,7 @@ export interface Student {
   photoUrl: string;
   phone?: string;
   email?: string;
+  sfId?: string;
   issuedSessionsToday: {
     [key in MealType]?: {
       tokenId?: string;
@@ -58,7 +60,9 @@ export interface TokenIssuanceLog {
   declineReason?: string;
   issuedByName?: string;
   issuedByEmail?: string;
+  issuedByPhone?: string;
   issuedByUserId?: string;
+  issuedByRole?: string;
 }
 
 export interface DailyStats {
@@ -83,7 +87,7 @@ export interface UserProfile {
   sfUserId?: string;
   loginProvider?: string;
   name: string;
-  role: 'Admin' | 'Student' | 'Warden' | 'Mess Management';
+  role: 'Admin' | 'Student' | 'Warden' | 'Mess Management' | 'Mess Manager' | 'College Principal';
   preference: DietPreference;
   email: string;
   photoUrl?: string;

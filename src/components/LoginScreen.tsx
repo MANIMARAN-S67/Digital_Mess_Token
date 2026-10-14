@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth, isStudentIdentifier } from '../context/AuthContext';
 
 export const LoginScreen: React.FC = () => {
   const { 
@@ -7,10 +7,14 @@ export const LoginScreen: React.FC = () => {
     signInWithEmail, 
     signUpWithEmail, 
     checkEmailExists,
+    checkPhoneExists,
     sendPhoneOtp,
+    sendLoginPhoneOtp,
     verifyPhoneOtp,
+    signInWithPhoneOtp,
     sendPasswordResetOtp,
     resetPasswordWithOtp,
+    loginAsDemoUser,
     loading, 
     authError, 
     clearAuthError 
@@ -20,13 +24,26 @@ export const LoginScreen: React.FC = () => {
   const [mode, setMode] = useState<'signin' | 'signup' | 'forgot_password'>('signin');
 
   // Sign In States
+  const [signInMethod, setSignInMethod] = useState<'email' | 'phone'>('email');
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showLoginPassword, setShowLoginPassword] = useState(false);
+  const [loginEmailWarning, setLoginEmailWarning] = useState('');
+
+  // Sign In Phone States
+  const [loginPhone, setLoginPhone] = useState('');
+  const [loginPhoneOtp, setLoginPhoneOtp] = useState('');
+  const [isLoginPhoneOtpSent, setIsLoginPhoneOtpSent] = useState(false);
+  const [loginPhoneOtpCountdown, setLoginPhoneOtpCountdown] = useState(0);
+  const [sentLoginOtpCode, setSentLoginOtpCode] = useState('');
+  const [loginPhoneError, setLoginPhoneError] = useState('');
+  const [loginPhoneLoading, setLoginPhoneLoading] = useState(false);
 
   // Sign Up States
+  const [signupRole, setSignupRole] = useState<'Mess Manager' | 'College Principal'>('Mess Manager');
   const [fullName, setFullName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
+  const [signupEmailWarning, setSignupEmailWarning] = useState('');
   const [emailDuplicateError, setEmailDuplicateError] = useState('');
   const [isCheckingEmail, setIsCheckingEmail] = useState(false);
 
@@ -36,8 +53,9 @@ export const LoginScreen: React.FC = () => {
   const [isPhoneVerified, setIsPhoneVerified] = useState(false);
   const [phoneOtpLoading, setPhoneOtpLoading] = useState(false);
   const [phoneOtpError, setPhoneOtpError] = useState('');
-  const [phoneOtpSuccess, setPhoneOtpSuccess] = useState('');
-  const [smsSimulatorToast, setSmsSimulatorToast] = useState<{ phone: string; otp: string } | null>(null);
+  const [phoneDuplicateError, setPhoneDuplicateError] = useState('');
+  const [isCheckingPhone, setIsCheckingPhone] = useState(false);
+  const [sentOtpCode, setSentOtpCode] = useState('');
   const [phoneOtpCountdown, setPhoneOtpCountdown] = useState(0);
 
   const [signupPassword, setSignupPassword] = useState('');
@@ -69,6 +87,14 @@ export const LoginScreen: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [phoneOtpCountdown]);
+
+  // Timer countdown effect for Login Phone OTP
+  useEffect(() => {
+    if (loginPhoneOtpCountdown > 0) {
+      const timer = setTimeout(() => setLoginPhoneOtpCountdown(loginPhoneOtpCountdown - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [loginPhoneOtpCountdown]);
 
   // Timer countdown effect for Email OTP
   useEffect(() => {
@@ -103,10 +129,33 @@ export const LoginScreen: React.FC = () => {
   const signupPassStrength = checkPasswordStrength(signupPassword);
   const newPassStrength = checkPasswordStrength(newPassword);
 
+  const handleLoginEmailChange = (val: string) => {
+    setLoginEmail(val);
+    if (isStudentIdentifier(val)) {
+      setLoginEmailWarning('Notice: Students cannot log in here. Only Mess Managers and College Principals are authorized.');
+    } else {
+      setLoginEmailWarning('');
+    }
+  };
+
+  const handleSignupEmailChange = (val: string) => {
+    setSignupEmail(val);
+    setEmailDuplicateError('');
+    if (isStudentIdentifier(val)) {
+      setSignupEmailWarning('Notice: Student registration is prohibited on this portal. Only Mess Managers and College Principals may register.');
+    } else {
+      setSignupEmailWarning('');
+    }
+  };
+
   // Real-time duplicate email validation for signup
   const handleEmailBlur = async () => {
     if (!signupEmail.trim() || !signupEmail.includes('@')) {
       setEmailDuplicateError('');
+      return;
+    }
+    if (isStudentIdentifier(signupEmail.trim())) {
+      setSignupEmailWarning('Notice: Student registration is prohibited on this portal. Only Mess Managers and College Principals may register.');
       return;
     }
     setIsCheckingEmail(true);
@@ -139,6 +188,10 @@ export const LoginScreen: React.FC = () => {
   const handleSignInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!loginEmail.trim() || !loginPassword) return;
+    if (isStudentIdentifier(loginEmail.trim())) {
+      setLoginEmailWarning('Access Denied: Only Mess Managers and the College Principal are authorized to log in with their email. Students are not allowed to log in here.');
+      return;
+    }
     setSubmitting(true);
     clearAuthError();
     try {
@@ -150,53 +203,88 @@ export const LoginScreen: React.FC = () => {
     }
   };
 
+  // Real-time duplicate phone validation for signup
+  const checkPhoneUnique = async (phoneToCheck: string) => {
+    const clean = phoneToCheck.replace(/\D/g, '').slice(-10);
+    if (clean.length !== 10) {
+      setPhoneDuplicateError('');
+      return;
+    }
+    setIsCheckingPhone(true);
+    try {
+      const exists = await checkPhoneExists(clean);
+      if (exists) {
+        setPhoneDuplicateError('This mobile number is already registered. Duplicate phone numbers are not allowed.');
+      } else {
+        setPhoneDuplicateError('');
+      }
+    } catch {
+      setPhoneDuplicateError('');
+    } finally {
+      setIsCheckingPhone(false);
+    }
+  };
+
   // Phone input formatting (digits only, max 10)
   const handlePhoneChange = (val: string) => {
     const cleaned = val.replace(/\D/g, '').slice(0, 10);
     setPhone(cleaned);
+    setPhoneOtpError('');
+    setPhoneDuplicateError('');
     // Reset verification if user modifies phone number
     if (isPhoneVerified) {
       setIsPhoneVerified(false);
       setIsPhoneOtpSent(false);
       setPhoneOtp('');
+      setSentOtpCode('');
+    }
+    if (cleaned.length === 10) {
+      checkPhoneUnique(cleaned);
     }
   };
 
-  // Send Phone OTP
+  // Send Phone OTP (Sign Up)
   const handleSendPhoneOtp = async () => {
-    if (phone.length !== 10) {
+    const cleanPhone = phone.replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length !== 10) {
       setPhoneOtpError('Phone number must be exactly 10 digits.');
       return;
     }
+    if (phoneDuplicateError) {
+      return;
+    }
+
     setPhoneOtpLoading(true);
     setPhoneOtpError('');
-    setPhoneOtpSuccess('');
     try {
-      const res = await sendPhoneOtp(phone);
+      const exists = await checkPhoneExists(cleanPhone);
+      if (exists) {
+        setPhoneDuplicateError('This mobile number is already registered. Duplicate phone numbers are not allowed.');
+        setPhoneOtpLoading(false);
+        return;
+      }
+      const res = await sendPhoneOtp(cleanPhone);
       setIsPhoneOtpSent(true);
       setPhoneOtpCountdown(60);
-      setPhoneOtpSuccess(`OTP sent to +91 ${phone}! Check your SMS.`);
-      setSmsSimulatorToast({ phone, otp: res.otp });
+      setSentOtpCode(res.otp);
     } catch (err: any) {
-      setPhoneOtpError(err?.message || 'Failed to send OTP.');
+      setPhoneOtpError(err?.message || 'Failed to dispatch OTP.');
     } finally {
       setPhoneOtpLoading(false);
     }
   };
 
-  // Verify Phone OTP
+  // Verify Phone OTP (Sign Up)
   const handleVerifyPhoneOtp = async () => {
-    if (!phoneOtp.trim()) {
-      setPhoneOtpError('Please enter the 6-digit OTP code.');
+    if (phoneOtp.trim().length !== 6) {
+      setPhoneOtpError('Please enter the complete 6-digit OTP code.');
       return;
     }
     setPhoneOtpLoading(true);
     setPhoneOtpError('');
     try {
-      await verifyPhoneOtp(phone, phoneOtp);
+      await verifyPhoneOtp(phone, phoneOtp.trim());
       setIsPhoneVerified(true);
-      setPhoneOtpSuccess('Phone number verified successfully!');
-      setSmsSimulatorToast(null);
     } catch (err: any) {
       setPhoneOtpError(err?.message || 'Incorrect OTP code.');
     } finally {
@@ -204,10 +292,56 @@ export const LoginScreen: React.FC = () => {
     }
   };
 
+  // Send Login Phone OTP (Sign In)
+  const handleSendLoginPhoneOtp = async () => {
+    const cleanPhone = loginPhone.replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length !== 10) {
+      setLoginPhoneError('Please enter a valid 10-digit mobile number.');
+      return;
+    }
+    setLoginPhoneLoading(true);
+    setLoginPhoneError('');
+    try {
+      const res = await sendLoginPhoneOtp(cleanPhone);
+      setIsLoginPhoneOtpSent(true);
+      setLoginPhoneOtpCountdown(60);
+      setSentLoginOtpCode(res.otp);
+    } catch (err: any) {
+      setLoginPhoneError(err?.message || 'Failed to send OTP to this number.');
+    } finally {
+      setLoginPhoneLoading(false);
+    }
+  };
+
+  // Verify and Sign In with Phone OTP
+  const handleLoginWithPhoneSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (loginPhoneOtp.trim().length !== 6) {
+      setLoginPhoneError('Please enter the complete 6-digit OTP code.');
+      return;
+    }
+    setSubmitting(true);
+    setLoginPhoneError('');
+    try {
+      await signInWithPhoneOtp(loginPhone, loginPhoneOtp.trim());
+    } catch (err: any) {
+      setLoginPhoneError(err?.message || 'Mobile login failed. Please verify the OTP code.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // Sign Up Submit
   const handleSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     clearAuthError();
+
+    // 0. Strict Student Account Block
+    if (isStudentIdentifier(signupEmail.trim())) {
+      setSignupEmailWarning('Notice: Student accounts cannot be created here. Only Mess Managers and College Principals may register.');
+      alert('Students cannot register on this portal. Only Mess Managers and the College Principal are authorized.');
+      return;
+    }
 
     // 1. Check all required fields
     if (!fullName.trim() || !signupEmail.trim() || !phone.trim() || !signupPassword || !confirmPassword) {
@@ -221,13 +355,19 @@ export const LoginScreen: React.FC = () => {
       return;
     }
 
-    // 3. Ensure phone OTP is verified
+    // 3. Ensure no duplicate phone
+    if (phoneDuplicateError) {
+      setPhoneOtpError('Cannot register with an existing phone number.');
+      return;
+    }
+
+    // 4. Ensure phone OTP is verified
     if (!isPhoneVerified) {
       setPhoneOtpError('Please verify your phone number with the OTP code before registering.');
       return;
     }
 
-    // 4. Validate duplicate email
+    // 5. Validate duplicate email
     if (emailDuplicateError) {
       return;
     }
@@ -246,7 +386,7 @@ export const LoginScreen: React.FC = () => {
 
     setSubmitting(true);
     try {
-      await signUpWithEmail(signupEmail.trim(), signupPassword, fullName.trim(), phone);
+      await signUpWithEmail(signupEmail.trim(), signupPassword, fullName.trim(), phone, signupRole);
     } catch {
       // Error handled in AuthContext
     } finally {
@@ -312,42 +452,7 @@ export const LoginScreen: React.FC = () => {
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-[#0c131f] via-[#131b26] to-[#1c2534] p-4 sm:p-6 font-sans">
       
-      {/* Real-time SMS Simulator Notification Banner (for Testing / Easy Verification) */}
-      {smsSimulatorToast && (
-        <div className="fixed top-5 right-5 z-50 max-w-sm bg-gray-900 border border-emerald-500/40 text-white rounded-2xl p-4 shadow-2xl backdrop-blur-md animate-bounce-short">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider">
-              <span className="material-symbols-outlined text-[18px]">sms</span>
-              <span>SMS Gateway • OTP Sent</span>
-            </div>
-            <button 
-              type="button" 
-              onClick={() => setSmsSimulatorToast(null)} 
-              className="text-gray-400 hover:text-white text-xs font-bold"
-            >
-              ✕
-            </button>
-          </div>
-          <p className="text-xs text-gray-300 mt-2">
-            Verification code sent to <strong className="text-white">+91 {smsSimulatorToast.phone}</strong>:
-          </p>
-          <div className="mt-2 flex items-center justify-between bg-black/40 px-3 py-2 rounded-xl border border-white/10">
-            <span className="font-mono text-xl font-extrabold text-emerald-400 tracking-widest">
-              {smsSimulatorToast.otp}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setPhoneOtp(smsSimulatorToast.otp);
-                setSmsSimulatorToast(null);
-              }}
-              className="text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded-lg font-bold"
-            >
-              Auto-Fill
-            </button>
-          </div>
-        </div>
-      )}
+
 
       {/* Real-time Institutional Email OTP Notification Banner */}
       {emailSimulatorToast && (
@@ -406,6 +511,27 @@ export const LoginScreen: React.FC = () => {
           <p className="text-xs font-semibold text-gray-500 mt-1 uppercase tracking-wider">
             Institutional Dining &amp; Management Portal
           </p>
+
+          {/* Administrative Role Badge */}
+          <div className="mt-2.5 inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-900 rounded-full text-[11px] font-bold shadow-2xs">
+            <span className="material-symbols-outlined text-[15px] text-amber-600">admin_panel_settings</span>
+            <span>Mess Manager &amp; College Principal Portal</span>
+          </div>
+          <p className="text-[11px] text-red-600 font-semibold mt-1 flex items-center justify-center gap-1">
+            <span className="material-symbols-outlined text-[14px]">block</span>
+            <span>Students cannot log in on this page</span>
+          </p>
+        </div>
+
+        {/* Access Control Notice Banner */}
+        <div className="mt-3.5 p-3 bg-amber-50/90 border border-amber-200/90 rounded-2xl flex items-start gap-2.5 text-xs text-amber-950 shadow-2xs">
+          <span className="material-symbols-outlined text-[18px] text-amber-600 shrink-0 mt-0.5">verified_user</span>
+          <div className="text-left">
+            <p className="font-bold text-[11px] text-amber-900">Authorized Personnel Only</p>
+            <p className="text-[11px] text-amber-800/90 mt-0.5 leading-snug">
+              Only authorized <strong>Mess Managers</strong> and the <strong>College Principal</strong> can log in to view mess operations, issue tokens to students, and audit attendance. All logins and token activities are synchronized to the <strong>Salesforce</strong> backend.
+            </p>
+          </div>
         </div>
 
         {/* Global Error Banner */}
@@ -499,94 +625,260 @@ export const LoginScreen: React.FC = () => {
               )}
             </button>
 
-            {/* Divider */}
-            <div className="relative flex py-1 items-center">
-              <div className="flex-grow border-t border-gray-200"></div>
-              <span className="flex-shrink mx-3 text-gray-400 text-[11px] font-bold uppercase tracking-wider">or sign in with email</span>
-              <div className="flex-grow border-t border-gray-200"></div>
+            {/* Sign In Method Selector Tabs */}
+            <div className="flex bg-gray-100 p-1 rounded-xl text-xs font-bold text-gray-600 mb-1">
+              <button
+                type="button"
+                onClick={() => { setSignInMethod('email'); clearAuthError(); }}
+                className={`flex-1 py-1.5 rounded-lg transition-all ${
+                  signInMethod === 'email' ? 'bg-white text-gray-900 shadow-xs font-extrabold' : 'hover:text-gray-900'
+                }`}
+              >
+                Email &amp; Password
+              </button>
+              <button
+                type="button"
+                onClick={() => { setSignInMethod('phone'); clearAuthError(); }}
+                className={`flex-1 py-1.5 rounded-lg transition-all ${
+                  signInMethod === 'phone' ? 'bg-white text-gray-900 shadow-xs font-extrabold' : 'hover:text-gray-900'
+                }`}
+              >
+                Mobile Number (OTP)
+              </button>
             </div>
 
-            {/* Email & Password Form */}
-            <form onSubmit={handleSignInSubmit} className="flex flex-col gap-3">
-              <div>
-                <label className="block text-[11px] font-bold text-gray-600 uppercase mb-1">
-                  Email Address <span className="text-red-500">*</span>
-                </label>
-                <div className="relative flex items-center">
-                  <input
-                    type="email"
-                    required
-                    placeholder="student@institution.edu"
-                    value={loginEmail}
-                    onChange={(e) => setLoginEmail(e.target.value)}
-                    className="w-full h-11 px-3.5 border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-[#1b4d5e] focus:ring-1 focus:ring-[#1b4d5e] outline-none"
-                  />
-                  <span className="material-symbols-outlined text-[18px] text-gray-400 absolute right-3 pointer-events-none">mail</span>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-1">
-                  <label className="block text-[11px] font-bold text-gray-600 uppercase">
-                    Password <span className="text-red-500">*</span>
+            {/* Method A: Email & Password Form */}
+            {signInMethod === 'email' && (
+              <form onSubmit={handleSignInSubmit} className="flex flex-col gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-600 uppercase mb-1">
+                    Institutional Email (Mess Manager / Principal) <span className="text-red-500">*</span>
                   </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setMode('forgot_password');
-                      setForgotEmail(loginEmail);
-                      setForgotStep('enter_email');
-                      clearAuthError();
-                    }}
-                    className="text-[11px] text-[#1b4d5e] hover:underline font-bold"
-                  >
-                    Forgot Password?
-                  </button>
+                  <div className="relative flex items-center">
+                    <input
+                      type="email"
+                      required
+                      placeholder="manager@institution.edu or principal@institution.edu"
+                      value={loginEmail}
+                      onChange={(e) => handleLoginEmailChange(e.target.value)}
+                      className={`w-full h-11 px-3.5 border rounded-xl text-sm text-gray-900 outline-none transition-all ${
+                        loginEmailWarning
+                          ? 'border-red-400 bg-red-50/40 focus:border-red-500'
+                          : 'border-gray-300 focus:border-[#1b4d5e] focus:ring-1 focus:ring-[#1b4d5e]'
+                      }`}
+                    />
+                    <span className="material-symbols-outlined text-[18px] text-gray-400 absolute right-3 pointer-events-none">mail</span>
+                  </div>
+                  {loginEmailWarning && (
+                    <div className="mt-1.5 p-2 bg-red-50 border border-red-200 rounded-xl text-[11px] text-red-700 font-semibold flex items-center gap-1.5 animate-fadeIn">
+                      <span className="material-symbols-outlined text-[15px] text-red-600 shrink-0">block</span>
+                      <span>{loginEmailWarning}</span>
+                    </div>
+                  )}
                 </div>
-                <div className="relative flex items-center">
-                  <input
-                    type={showLoginPassword ? 'text' : 'password'}
-                    required
-                    placeholder="••••••••"
-                    value={loginPassword}
-                    onChange={(e) => setLoginPassword(e.target.value)}
-                    className="w-full h-11 px-3.5 border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-[#1b4d5e] focus:ring-1 focus:ring-[#1b4d5e] outline-none pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowLoginPassword(!showLoginPassword)}
-                    className="absolute right-3 text-gray-400 hover:text-gray-600 focus:outline-none"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">
-                      {showLoginPassword ? 'visibility_off' : 'visibility'}
+
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-[11px] font-bold text-gray-600 uppercase">
+                      Password <span className="text-red-500">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMode('forgot_password');
+                        setForgotEmail(loginEmail);
+                        setForgotStep('enter_email');
+                        clearAuthError();
+                      }}
+                      className="text-[11px] text-[#1b4d5e] hover:underline font-bold"
+                    >
+                      Forgot Password?
+                    </button>
+                  </div>
+                  <div className="relative flex items-center">
+                    <input
+                      type={showLoginPassword ? 'text' : 'password'}
+                      required
+                      placeholder="••••••••"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      className="w-full h-11 px-3.5 border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-[#1b4d5e] focus:ring-1 focus:ring-[#1b4d5e] outline-none pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowLoginPassword(!showLoginPassword)}
+                      className="absolute right-3 text-gray-400 hover:text-gray-600 focus:outline-none"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">
+                        {showLoginPassword ? 'visibility_off' : 'visibility'}
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={submitting || loading || Boolean(loginEmailWarning)}
+                  className="w-full h-11 mt-1 bg-[#1b4d5e] hover:bg-[#153e4b] disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-md active:scale-[0.99]"
+                >
+                  {submitting ? 'Authenticating & Syncing to Salesforce...' : 'Sign In as Manager / Principal'}
+                </button>
+              </form>
+            )}
+
+            {/* Method B: Mobile Number + OTP Form */}
+            {signInMethod === 'phone' && (
+              <form onSubmit={handleLoginWithPhoneSubmit} className="flex flex-col gap-3">
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-[11px] font-bold text-gray-600 uppercase">
+                      Registered Mobile Number <span className="text-red-500">*</span>
+                    </label>
+                    <span className="text-[10px] font-bold text-gray-400">
+                      {loginPhone.length}/10 digits
                     </span>
-                  </button>
+                  </div>
+
+                  <div className="flex gap-2">
+                    <div className="flex items-center px-2.5 bg-gray-100 border border-gray-300 rounded-xl text-xs font-bold text-gray-600 shrink-0">
+                      🇮🇳 +91
+                    </div>
+                    <input
+                      type="tel"
+                      required
+                      placeholder="Enter 10-digit mobile number"
+                      value={loginPhone}
+                      onChange={(e) => {
+                        setLoginPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
+                        setLoginPhoneError('');
+                        setIsLoginPhoneOtpSent(false);
+                        setLoginPhoneOtp('');
+                        setSentLoginOtpCode('');
+                      }}
+                      className="flex-1 h-11 px-3 border border-gray-300 rounded-xl text-sm font-mono text-gray-900 focus:border-[#1b4d5e] outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSendLoginPhoneOtp}
+                      disabled={loginPhone.length !== 10 || loginPhoneLoading || loginPhoneOtpCountdown > 0}
+                      className="px-3.5 h-11 bg-[#1b4d5e] hover:bg-[#153e4b] disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl text-xs font-bold transition-all shrink-0 shadow-xs"
+                    >
+                      {loginPhoneLoading ? 'Sending...' : loginPhoneOtpCountdown > 0 ? `${loginPhoneOtpCountdown}s` : isLoginPhoneOtpSent ? 'Resend' : 'Send OTP'}
+                    </button>
+                  </div>
                 </div>
-              </div>
 
-              <button
-                type="submit"
-                disabled={submitting || loading}
-                className="w-full h-11 mt-1 bg-[#1b4d5e] hover:bg-[#153e4b] text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-md active:scale-[0.99] disabled:opacity-50"
-              >
-                {submitting ? 'Authenticating...' : 'Sign In'}
-              </button>
+                {/* Login OTP input section */}
+                {isLoginPhoneOtpSent && (
+                  <div className="p-3 bg-gradient-to-br from-emerald-50/70 to-slate-50 border border-emerald-200 rounded-2xl flex flex-col gap-2.5 animate-fadeIn">
+                    <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
+                      <div className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[16px] text-emerald-600">sms</span>
+                        <span>SMS Dispatched</span>
+                      </div>
+                      <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                        Valid for 10m
+                      </span>
+                    </div>
 
-              {/* Sign up here link */}
-              <div className="text-center mt-3 pt-3 border-t border-gray-100">
-                <span className="text-xs text-gray-500">Don't have an account? </span>
+                    {sentLoginOtpCode && (
+                      <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-emerald-100 shadow-2xs">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] text-gray-500 font-medium">Original Verification Code</span>
+                          <span className="font-mono text-base font-extrabold text-emerald-700 tracking-widest">
+                            {sentLoginOtpCode}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setLoginPhoneOtp(sentLoginOtpCode)}
+                          className="text-[11px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold transition-all shadow-xs"
+                        >
+                          Auto-Fill
+                        </button>
+                      </div>
+                    )}
+
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[10px] font-bold text-gray-600 uppercase">
+                        Enter 6-Digit SMS OTP
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={6}
+                        placeholder="••••••"
+                        value={loginPhoneOtp}
+                        onChange={(e) => setLoginPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                        className="h-10 px-3 border border-gray-300 rounded-xl font-mono text-base tracking-widest text-center text-gray-900 focus:border-[#1b4d5e] bg-white outline-none"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={submitting || loginPhoneOtp.length !== 6}
+                      className="w-full h-10 mt-1 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-300 text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-xs"
+                    >
+                      {submitting ? 'Verifying...' : 'Verify OTP & Sign In'}
+                    </button>
+                  </div>
+                )}
+
+                {loginPhoneError && (
+                  <p className="text-[11px] font-bold text-red-600 mt-0.5 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[14px]">error</span>
+                    {loginPhoneError}
+                  </p>
+                )}
+              </form>
+            )}
+
+            {/* Instant Authorized Test Profiles */}
+            <div className="mt-2 pt-3 border-t border-gray-100 flex flex-col gap-2">
+              <span className="text-[10px] font-extrabold text-gray-400 uppercase tracking-wider text-center">
+                Instant Authorized Test Logins (Synced to Salesforce)
+              </span>
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    setMode('signup');
-                    clearAuthError();
-                  }}
-                  className="text-xs text-[#1b4d5e] hover:underline font-extrabold"
+                  onClick={() => loginAsDemoUser('Mess Manager')}
+                  disabled={loading || submitting}
+                  className="p-2.5 rounded-xl border border-[#1b4d5e]/30 bg-sky-50/50 hover:bg-sky-100/60 text-[#1b4d5e] text-left transition-all flex flex-col group active:scale-98"
                 >
-                  Sign up here
+                  <span className="text-[11px] font-extrabold flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[14px]">restaurant_menu</span>
+                    Mess Manager
+                  </span>
+                  <span className="text-[9px] text-gray-500 font-mono mt-0.5 truncate">manager@institution.edu</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => loginAsDemoUser('College Principal')}
+                  disabled={loading || submitting}
+                  className="p-2.5 rounded-xl border border-purple-200 bg-purple-50/50 hover:bg-purple-100/60 text-purple-900 text-left transition-all flex flex-col group active:scale-98"
+                >
+                  <span className="text-[11px] font-extrabold flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[14px]">school</span>
+                    College Principal
+                  </span>
+                  <span className="text-[9px] text-gray-500 font-mono mt-0.5 truncate">principal@institution.edu</span>
                 </button>
               </div>
-            </form>
+            </div>
+
+            {/* Sign up here link */}
+            <div className="text-center mt-3 pt-3 border-t border-gray-100">
+              <span className="text-xs text-gray-500">Need administrative access? </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setMode('signup');
+                  clearAuthError();
+                }}
+                className="text-xs text-[#1b4d5e] hover:underline font-extrabold"
+              >
+                Register as Manager / Principal
+              </button>
+            </div>
           </div>
         )}
 
@@ -597,8 +889,48 @@ export const LoginScreen: React.FC = () => {
           <form onSubmit={handleSignUpSubmit} className="flex flex-col gap-3.5 mt-1">
             <div className="bg-sky-50 border border-sky-100 rounded-xl p-2.5 text-center">
               <p className="text-[11px] font-semibold text-sky-800">
-                Create your student account. All fields are required.
+                Institutional Staff Registration (Mess Manager &amp; College Principal Only)
               </p>
+            </div>
+
+            {/* Role Selection */}
+            <div>
+              <label className="block text-[11px] font-bold text-gray-600 uppercase mb-1.5">
+                Designated Institutional Role <span className="text-red-500">*</span>
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSignupRole('Mess Manager')}
+                  className={`p-2.5 rounded-xl border text-left flex flex-col transition-all ${
+                    signupRole === 'Mess Manager'
+                      ? 'border-[#1b4d5e] bg-sky-50/70 text-[#1b4d5e] font-extrabold ring-1 ring-[#1b4d5e]'
+                      : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="material-symbols-outlined text-[16px]">restaurant_menu</span>
+                    <span>Mess Manager</span>
+                  </div>
+                  <span className="text-[10px] text-gray-500 mt-0.5">Issue tokens &amp; dining audit</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSignupRole('College Principal')}
+                  className={`p-2.5 rounded-xl border text-left flex flex-col transition-all ${
+                    signupRole === 'College Principal'
+                      ? 'border-purple-600 bg-purple-50/70 text-purple-900 font-extrabold ring-1 ring-purple-600'
+                      : 'border-gray-200 hover:border-gray-300 text-gray-600'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 text-xs">
+                    <span className="material-symbols-outlined text-[16px]">school</span>
+                    <span>College Principal</span>
+                  </div>
+                  <span className="text-[10px] text-gray-500 mt-0.5">Executive overview</span>
+                </button>
+              </div>
             </div>
 
             {/* Full Name */}
@@ -609,7 +941,7 @@ export const LoginScreen: React.FC = () => {
               <input
                 type="text"
                 required
-                placeholder="e.g. Rahul Sharma"
+                placeholder="e.g. Dr. Rajesh Kumar or S. Ramanathan"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 className="w-full h-10 px-3.5 border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-[#1b4d5e] focus:ring-1 focus:ring-[#1b4d5e] outline-none"
@@ -620,28 +952,31 @@ export const LoginScreen: React.FC = () => {
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-[11px] font-bold text-gray-600 uppercase">
-                  Email Address <span className="text-red-500">*</span>
+                  Institutional Email Address <span className="text-red-500">*</span>
                 </label>
                 {isCheckingEmail && (
-                  <span className="text-[10px] text-gray-400 animate-pulse">Checking availability...</span>
+                  <span className="text-[10px] text-sky-600 font-semibold animate-pulse">Checking availability...</span>
                 )}
               </div>
               <input
                 type="email"
                 required
-                placeholder="student@institution.edu"
+                placeholder="manager@institution.edu or principal@institution.edu"
                 value={signupEmail}
-                onChange={(e) => {
-                  setSignupEmail(e.target.value);
-                  setEmailDuplicateError('');
-                }}
+                onChange={(e) => handleSignupEmailChange(e.target.value)}
                 onBlur={handleEmailBlur}
                 className={`w-full h-10 px-3.5 border rounded-xl text-sm text-gray-900 outline-none transition-all ${
-                  emailDuplicateError 
+                  emailDuplicateError || signupEmailWarning
                     ? 'border-red-400 bg-red-50/50 focus:border-red-500' 
                     : 'border-gray-300 focus:border-[#1b4d5e] focus:ring-1 focus:ring-[#1b4d5e]'
                 }`}
               />
+              {signupEmailWarning && (
+                <div className="mt-1.5 p-2 bg-red-50 border border-red-200 rounded-xl text-[11px] text-red-700 font-semibold flex items-center gap-1.5 animate-fadeIn">
+                  <span className="material-symbols-outlined text-[15px] text-red-600 shrink-0">block</span>
+                  <span>{signupEmailWarning}</span>
+                </div>
+              )}
               {emailDuplicateError && (
                 <p className="text-[11px] font-bold text-red-600 mt-1 flex items-center gap-1">
                   <span className="material-symbols-outlined text-[14px]">error</span>
@@ -656,9 +991,16 @@ export const LoginScreen: React.FC = () => {
                 <label className="block text-[11px] font-bold text-gray-600 uppercase">
                   Phone Number (10 Digits) <span className="text-red-500">*</span>
                 </label>
-                <span className="text-[10px] font-bold text-gray-400">
-                  {phone.length}/10 digits
-                </span>
+                <div className="flex items-center gap-2">
+                  {isCheckingPhone && (
+                    <span className="text-[10px] text-sky-600 font-semibold animate-pulse">
+                      Checking uniqueness...
+                    </span>
+                  )}
+                  <span className="text-[10px] font-bold text-gray-400">
+                    {phone.length}/10 digits
+                  </span>
+                </div>
               </div>
 
               <div className="flex gap-2">
@@ -668,11 +1010,14 @@ export const LoginScreen: React.FC = () => {
                 <input
                   type="tel"
                   required
-                  placeholder="9876543210"
+                  placeholder="Enter 10-digit mobile number"
                   value={phone}
                   onChange={(e) => handlePhoneChange(e.target.value)}
+                  onBlur={() => checkPhoneUnique(phone)}
                   className={`flex-1 h-10 px-3 border rounded-xl text-sm font-mono text-gray-900 outline-none transition-all ${
-                    isPhoneVerified 
+                    phoneDuplicateError 
+                      ? 'border-red-400 bg-red-50/50 focus:border-red-500'
+                      : isPhoneVerified 
                       ? 'border-emerald-500 bg-emerald-50/40' 
                       : 'border-gray-300 focus:border-[#1b4d5e]'
                   }`}
@@ -681,58 +1026,89 @@ export const LoginScreen: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleSendPhoneOtp}
-                    disabled={phone.length !== 10 || phoneOtpLoading || phoneOtpCountdown > 0}
-                    className="px-3 h-10 bg-[#1b4d5e] hover:bg-[#153e4b] disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl text-xs font-bold transition-all shrink-0"
+                    disabled={phone.length !== 10 || phoneOtpLoading || phoneOtpCountdown > 0 || Boolean(phoneDuplicateError)}
+                    className="px-3.5 h-10 bg-[#1b4d5e] hover:bg-[#153e4b] disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl text-xs font-bold transition-all shrink-0 shadow-xs"
                   >
                     {phoneOtpLoading ? 'Sending...' : phoneOtpCountdown > 0 ? `${phoneOtpCountdown}s` : isPhoneOtpSent ? 'Resend OTP' : 'Send OTP'}
                   </button>
                 ) : (
-                  <div className="flex items-center gap-1 px-2.5 h-10 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold shrink-0">
+                  <div className="flex items-center gap-1.5 px-3 h-10 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold shrink-0 border border-emerald-200">
                     <span className="material-symbols-outlined text-[16px] text-emerald-600">verified</span>
                     <span>Verified</span>
                   </div>
                 )}
               </div>
 
-              {/* OTP Input Field if OTP Sent and Not Verified */}
+              {phoneDuplicateError && (
+                <p className="text-[11px] font-bold text-red-600 mt-1.5 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[14px]">error</span>
+                  {phoneDuplicateError}
+                </p>
+              )}
+
+              {/* Clean, Non-duplicate OTP Verification Panel */}
               {isPhoneOtpSent && !isPhoneVerified && (
-                <div className="mt-2.5 p-3 bg-gray-50 border border-gray-200 rounded-xl flex flex-col gap-2 animate-fadeIn">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-gray-600">
-                    <span>Enter 6-Digit SMS OTP</span>
-                    <span className="text-gray-400">Sent to +91 {phone}</span>
+                <div className="mt-3 p-3.5 bg-gradient-to-br from-emerald-50/70 to-slate-50 border border-emerald-200 rounded-2xl flex flex-col gap-2.5 animate-fadeIn shadow-xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-900">
+                      <span className="material-symbols-outlined text-[16px] text-emerald-600">sms</span>
+                      <span>SMS Dispatched</span>
+                    </div>
+                    <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                      Valid for 10m
+                    </span>
                   </div>
-                  <div className="flex gap-2">
+
+                  {sentOtpCode && (
+                    <div className="flex items-center justify-between bg-white px-3 py-2 rounded-xl border border-emerald-100 shadow-2xs">
+                      <div className="flex flex-col">
+                        <span className="text-[10px] text-gray-500 font-medium">Original OTP Code</span>
+                        <span className="font-mono text-base font-extrabold text-emerald-700 tracking-widest">
+                          {sentOtpCode}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPhoneOtp(sentOtpCode)}
+                        className="text-[11px] bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white px-2.5 py-1 rounded-lg font-bold transition-all shadow-xs"
+                      >
+                        Auto-Fill
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex gap-2 mt-0.5">
                     <input
                       type="text"
                       maxLength={6}
-                      placeholder="e.g. 583921"
+                      placeholder="Enter 6-digit code"
                       value={phoneOtp}
                       onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      className="flex-1 h-10 px-3 border border-gray-300 rounded-xl font-mono text-sm tracking-widest text-center text-gray-900 focus:border-[#1b4d5e] outline-none"
+                      className="flex-1 h-10 px-3 border border-gray-300 rounded-xl font-mono text-sm tracking-widest text-center text-gray-900 focus:border-[#1b4d5e] focus:bg-white bg-white/90 outline-none"
                     />
                     <button
                       type="button"
                       onClick={handleVerifyPhoneOtp}
                       disabled={phoneOtp.length !== 6 || phoneOtpLoading}
-                      className="px-4 h-10 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shrink-0"
+                      className="px-4 h-10 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shrink-0 shadow-xs active:scale-98"
                     >
-                      {phoneOtpLoading ? 'Checking...' : 'Verify OTP'}
+                      {phoneOtpLoading ? 'Verifying...' : 'Verify OTP'}
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* Status messages for Phone OTP */}
+              {/* Status feedback */}
               {phoneOtpError && (
-                <p className="text-[11px] font-bold text-red-600 mt-1 flex items-center gap-1">
+                <p className="text-[11px] font-bold text-red-600 mt-1.5 flex items-center gap-1">
                   <span className="material-symbols-outlined text-[14px]">error</span>
                   {phoneOtpError}
                 </p>
               )}
-              {phoneOtpSuccess && (
-                <p className="text-[11px] font-bold text-emerald-600 mt-1 flex items-center gap-1">
+              {isPhoneVerified && (
+                <p className="text-[11px] font-bold text-emerald-700 mt-1.5 flex items-center gap-1">
                   <span className="material-symbols-outlined text-[14px]">check_circle</span>
-                  {phoneOtpSuccess}
+                  Phone number verified successfully!
                 </p>
               )}
             </div>
@@ -849,19 +1225,21 @@ export const LoginScreen: React.FC = () => {
                 !fullName.trim() || 
                 !signupEmail.trim() || 
                 !phone.trim() || 
-                !isPhoneVerified || 
-                !signupPassStrength.isStrong || 
+                !isPhoneVerified ||
+                !signupPassStrength.isStrong ||
                 signupPassword !== confirmPassword ||
-                Boolean(emailDuplicateError)
+                Boolean(emailDuplicateError) ||
+                Boolean(phoneDuplicateError) ||
+                Boolean(signupEmailWarning)
               }
               className="w-full h-11 mt-2 bg-[#1b4d5e] hover:bg-[#153e4b] disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-md active:scale-[0.99]"
             >
-              {submitting ? 'Creating Student Account...' : 'Complete Sign Up'}
+              {submitting ? 'Registering & Syncing to Salesforce...' : `Register as ${signupRole}`}
             </button>
 
             {/* Switch to sign in */}
             <div className="text-center mt-2 pt-2 border-t border-gray-100">
-              <span className="text-xs text-gray-500">Already registered? </span>
+              <span className="text-xs text-gray-500">Already registered as staff? </span>
               <button
                 type="button"
                 onClick={() => {
@@ -916,7 +1294,7 @@ export const LoginScreen: React.FC = () => {
                   <input
                     type="email"
                     required
-                    placeholder="student@institution.edu"
+                    placeholder="manager@institution.edu or principal@institution.edu"
                     value={forgotEmail}
                     onChange={(e) => setForgotEmail(e.target.value)}
                     className="w-full h-11 px-3.5 border border-gray-300 rounded-xl text-sm text-gray-900 focus:border-[#1b4d5e] focus:ring-1 focus:ring-[#1b4d5e] outline-none"

@@ -4,6 +4,7 @@ export const INITIAL_STUDENTS: Student[] = [
   {
     id: '21CS1004',
     name: 'Rahul Sharma',
+    academicYear: '4th Year',
     department: 'Computer Science',
     hostelRoom: 'BH-3 / 214',
     preference: 'Non-Veg',
@@ -16,6 +17,7 @@ export const INITIAL_STUDENTS: Student[] = [
   {
     id: 'STU-9104',
     name: 'Priya Sharma',
+    academicYear: '3rd Year',
     department: 'Electronics & Comm.',
     hostelRoom: 'GH-2 / 108',
     preference: 'Non-Veg',
@@ -34,6 +36,7 @@ export const INITIAL_STUDENTS: Student[] = [
   {
     id: 'STU-8892',
     name: 'Aarav Patel',
+    academicYear: '2nd Year',
     department: 'Mechanical Engg.',
     hostelRoom: 'BH-1 / 302',
     preference: 'Veg',
@@ -52,6 +55,7 @@ export const INITIAL_STUDENTS: Student[] = [
   {
     id: 'STU-7731',
     name: 'Rohan Gupta',
+    academicYear: '3rd Year',
     department: 'Civil Engineering',
     hostelRoom: 'BH-2 / 115',
     preference: 'Veg',
@@ -70,6 +74,7 @@ export const INITIAL_STUDENTS: Student[] = [
   {
     id: 'STU-8822',
     name: 'Ananya Singh',
+    academicYear: '2nd Year',
     department: 'Information Technology',
     hostelRoom: 'GH-1 / 205',
     preference: 'Veg',
@@ -82,6 +87,7 @@ export const INITIAL_STUDENTS: Student[] = [
   {
     id: 'CS-2023-041',
     name: 'John Doe',
+    academicYear: '2nd Year',
     department: 'Computer Science',
     hostelRoom: 'BH-3 / 102',
     preference: 'Veg',
@@ -100,6 +106,7 @@ export const INITIAL_STUDENTS: Student[] = [
   {
     id: 'ME-2022-105',
     name: 'Alice Smith',
+    academicYear: '3rd Year',
     department: 'Mechanical Engg.',
     hostelRoom: 'GH-3 / 310',
     preference: 'Non-Veg',
@@ -118,6 +125,7 @@ export const INITIAL_STUDENTS: Student[] = [
   {
     id: 'EC-2024-012',
     name: 'Rahul Jain',
+    academicYear: '1st Year',
     department: 'Electronics',
     hostelRoom: 'BH-4 / 401',
     preference: 'Veg',

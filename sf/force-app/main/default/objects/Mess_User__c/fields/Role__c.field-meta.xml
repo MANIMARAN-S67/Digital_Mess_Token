@@ -11,8 +11,18 @@
         <valueSetDefinition>
             <sorted>false</sorted>
             <value>
-                <fullName>Admin</fullName>
+                <fullName>Mess Manager</fullName>
                 <default>true</default>
+                <label>Mess Manager</label>
+            </value>
+            <value>
+                <fullName>College Principal</fullName>
+                <default>false</default>
+                <label>College Principal</label>
+            </value>
+            <value>
+                <fullName>Admin</fullName>
+                <default>false</default>
                 <label>Admin</label>
             </value>
             <value>

@@ -9,15 +9,15 @@
     <formFactors>Small</formFactors>
     <isNavPersonalizationDisabled>false</isNavPersonalizationDisabled>
     <isNavTabPersistenceDisabled>false</isNavTabPersistenceDisabled>
-    <label>Digital Mess Manager</label>
+    <label>Digital Mess Management</label>
     <navType>Standard</navType>
     <tabs>standard-home</tabs>
     <tabs>Digital_Mess_Dashboard</tabs>
-    <tabs>Mess_User__c</tabs>
-    <tabs>Meal_Token__c</tabs>
     <tabs>Student__c</tabs>
-    <tabs>Menu__c</tabs>
+    <tabs>Mess_User__c</tabs>
     <tabs>Meal_Attendance__c</tabs>
+    <tabs>Meal_Token__c</tabs>
+    <tabs>Menu__c</tabs>
     <tabs>standard-report</tabs>
     <tabs>standard-Dashboard</tabs>
     <uiType>Lightning</uiType>

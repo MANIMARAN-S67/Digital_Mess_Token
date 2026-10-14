@@ -15,5 +15,23 @@
         <type>Text</type>
     </nameField>
     <pluralLabel>Mess Users</pluralLabel>
+    <searchLayouts>
+        <customTabListAdditionalFields>Email__c</customTabListAdditionalFields>
+        <customTabListAdditionalFields>Role__c</customTabListAdditionalFields>
+        <customTabListAdditionalFields>Department__c</customTabListAdditionalFields>
+        <customTabListAdditionalFields>Phone__c</customTabListAdditionalFields>
+        <customTabListAdditionalFields>Tokens_Issued_Today__c</customTabListAdditionalFields>
+        <customTabListAdditionalFields>Total_Tokens_Issued__c</customTabListAdditionalFields>
+        <customTabListAdditionalFields>Last_Login__c</customTabListAdditionalFields>
+        <customTabListAdditionalFields>Status__c</customTabListAdditionalFields>
+        <searchResultsAdditionalFields>Email__c</searchResultsAdditionalFields>
+        <searchResultsAdditionalFields>Role__c</searchResultsAdditionalFields>
+        <searchResultsAdditionalFields>Department__c</searchResultsAdditionalFields>
+        <searchResultsAdditionalFields>Phone__c</searchResultsAdditionalFields>
+        <searchResultsAdditionalFields>Tokens_Issued_Today__c</searchResultsAdditionalFields>
+        <searchResultsAdditionalFields>Total_Tokens_Issued__c</searchResultsAdditionalFields>
+        <searchResultsAdditionalFields>Last_Login__c</searchResultsAdditionalFields>
+        <searchResultsAdditionalFields>Status__c</searchResultsAdditionalFields>
+    </searchLayouts>
     <sharingModel>ReadWrite</sharingModel>
 </CustomObject>

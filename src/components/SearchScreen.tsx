@@ -221,6 +221,15 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({
             <div className="grid grid-cols-2 gap-3">
               <div className="flex flex-col">
                 <span className="text-[12px] font-medium text-[#43474e] uppercase tracking-wider">
+                  Academic Year
+                </span>
+                <span className="text-[15px] text-[#002045] font-bold truncate">
+                  {activeStudent.academicYear || '1st Year'}
+                </span>
+              </div>
+
+              <div className="flex flex-col">
+                <span className="text-[12px] font-medium text-[#43474e] uppercase tracking-wider">
                   Department
                 </span>
                 <span className="text-[15px] text-[#0d1c2e] font-medium truncate">
@@ -239,15 +248,6 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({
 
               <div className="flex flex-col">
                 <span className="text-[12px] font-medium text-[#43474e] uppercase tracking-wider">
-                  Current Meal
-                </span>
-                <span className="text-[15px] text-[#0d1c2e] font-medium truncate">
-                  {currentMeal} (12:30 - 14:00)
-                </span>
-              </div>
-
-              <div className="flex flex-col">
-                <span className="text-[12px] font-medium text-[#43474e] uppercase tracking-wider">
                   Status
                 </span>
                 <div className="flex items-center gap-1.5 text-[#0a6c44]">
@@ -261,6 +261,28 @@ export const SearchScreen: React.FC<SearchScreenProps> = ({
                   </span>
                 </div>
               </div>
+
+              {activeStudent.phone && (
+                <div className="flex flex-col">
+                  <span className="text-[12px] font-medium text-[#43474e] uppercase tracking-wider">
+                    Contact Phone
+                  </span>
+                  <span className="text-[13px] text-[#0d1c2e] font-mono truncate">
+                    {activeStudent.phone}
+                  </span>
+                </div>
+              )}
+
+              {activeStudent.email && (
+                <div className="flex flex-col">
+                  <span className="text-[12px] font-medium text-[#43474e] uppercase tracking-wider">
+                    Email
+                  </span>
+                  <span className="text-[13px] text-[#0d1c2e] font-mono truncate">
+                    {activeStudent.email}
+                  </span>
+                </div>
+              )}
             </div>
           </div>
         </section>

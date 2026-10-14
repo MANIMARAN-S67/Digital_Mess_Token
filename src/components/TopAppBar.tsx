@@ -5,12 +5,14 @@ interface TopAppBarProps {
   onOpenProfile: () => void;
   onOpenNotifications: () => void;
   unreadCount?: number;
+  onOpenBackendInspector?: () => void;
 }
 
 export const TopAppBar: React.FC<TopAppBarProps> = ({
   onOpenProfile,
   onOpenNotifications,
-  unreadCount = 2
+  unreadCount = 2,
+  onOpenBackendInspector
 }) => {
   const { dbUser, signOut } = useAuth();
   const userName = dbUser?.name || 'Administrator';
@@ -41,14 +43,26 @@ export const TopAppBar: React.FC<TopAppBarProps> = ({
         </div>
       </div>
 
-      {/* Right: Notifications, User Profile & Direct Logout Button */}
+      {/* Right: DB Explorer, Notifications, User Profile & Direct Logout Button */}
       <div className="flex items-center gap-2 sm:gap-3">
+        {/* Backend Database Inspector Button */}
+        {onOpenBackendInspector && (
+          <button
+            onClick={onOpenBackendInspector}
+            title="Inspect Firestore Backend Database & Activity Logs"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-[#005231] border border-emerald-300 rounded-xl text-[12px] font-bold transition-all active:scale-95 shadow-xs cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[18px]">database</span>
+            <span className="hidden sm:inline">DB Explorer</span>
+          </button>
+        )}
+
         {/* Notifications Button */}
         <button
           onClick={onOpenNotifications}
           aria-label="Notifications"
           title="Notifications"
-          className="relative w-9 h-9 flex items-center justify-center text-[#002045] hover:bg-[#eff4ff] active:scale-95 transition-all duration-200 rounded-full"
+          className="relative w-9 h-9 flex items-center justify-center text-[#002045] hover:bg-[#eff4ff] active:scale-95 transition-all duration-200 rounded-full cursor-pointer"
         >
           <span className="material-symbols-outlined text-[22px]">notifications</span>
           {unreadCount > 0 && (

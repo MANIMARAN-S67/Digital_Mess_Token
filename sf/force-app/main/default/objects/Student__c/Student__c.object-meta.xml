@@ -14,5 +14,23 @@
         <type>Text</type>
     </nameField>
     <pluralLabel>Students</pluralLabel>
+    <searchLayouts>
+        <customTabListAdditionalFields>Student_ID__c</customTabListAdditionalFields>
+        <customTabListAdditionalFields>Academic_Year__c</customTabListAdditionalFields>
+        <customTabListAdditionalFields>Department__c</customTabListAdditionalFields>
+        <customTabListAdditionalFields>Hostel_Room__c</customTabListAdditionalFields>
+        <customTabListAdditionalFields>Diet_Preference__c</customTabListAdditionalFields>
+        <customTabListAdditionalFields>Phone__c</customTabListAdditionalFields>
+        <customTabListAdditionalFields>Email__c</customTabListAdditionalFields>
+        <customTabListAdditionalFields>Status__c</customTabListAdditionalFields>
+        <searchResultsAdditionalFields>Student_ID__c</searchResultsAdditionalFields>
+        <searchResultsAdditionalFields>Academic_Year__c</searchResultsAdditionalFields>
+        <searchResultsAdditionalFields>Department__c</searchResultsAdditionalFields>
+        <searchResultsAdditionalFields>Hostel_Room__c</searchResultsAdditionalFields>
+        <searchResultsAdditionalFields>Diet_Preference__c</searchResultsAdditionalFields>
+        <searchResultsAdditionalFields>Phone__c</searchResultsAdditionalFields>
+        <searchResultsAdditionalFields>Email__c</searchResultsAdditionalFields>
+        <searchResultsAdditionalFields>Status__c</searchResultsAdditionalFields>
+    </searchLayouts>
     <sharingModel>ReadWrite</sharingModel>
 </CustomObject>

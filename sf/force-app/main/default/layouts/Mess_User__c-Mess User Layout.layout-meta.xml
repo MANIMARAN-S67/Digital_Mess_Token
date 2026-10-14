@@ -131,12 +131,13 @@
         <style>CustomLinks</style>
     </layoutSections>
     <relatedLists>
-        <fields>NAME</fields>
+        <fields>Token_Number__c</fields>
         <fields>Student__c</fields>
         <fields>Meal_Type__c</fields>
+        <fields>Diet_Preference__c</fields>
         <fields>Token_Date__c</fields>
+        <fields>Token_Time__c</fields>
         <fields>Status__c</fields>
-        <fields>Collected_Time__c</fields>
         <relatedList>Meal_Token__c.Issued_By_User__c</relatedList>
     </relatedLists>
 </Layout>

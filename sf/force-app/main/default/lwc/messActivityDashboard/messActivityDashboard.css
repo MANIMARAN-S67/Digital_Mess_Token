@@ -1,0 +1,146 @@
+/* Digital Mess Management - Executive LWC Dashboard Styles */
+
+.dashboard-container {
+    background-color: #f4f6f9;
+    min-height: 100%;
+}
+
+/* Hero Command Header */
+.command-header {
+    background: linear-gradient(135deg, #001733 0%, #002b5c 50%, #0d4b8f 100%);
+    color: #ffffff;
+    border-radius: 1rem;
+    box-shadow: 0 10px 25px -5px rgba(0, 32, 69, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.live-pulse-dot {
+    width: 10px;
+    height: 10px;
+    background-color: #10b981;
+    border-radius: 50%;
+    display: inline-block;
+    box-shadow: 0 0 0 rgba(16, 185, 129, 0.4);
+    animation: livePulse 2s infinite;
+}
+
+@keyframes livePulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(16, 185, 129, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
+    }
+}
+
+.user-avatar-pill {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 0.75rem;
+    backdrop-filter: blur(8px);
+}
+
+/* Metric KPI Cards */
+.kpi-card {
+    background: #ffffff;
+    border-radius: 0.85rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s ease-in-out;
+    position: relative;
+    overflow: hidden;
+}
+
+.kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 16px rgba(0, 32, 69, 0.08);
+}
+
+.kpi-card-tokens {
+    border-top: 4px solid #002b5c;
+}
+
+.kpi-card-diet {
+    border-top: 4px solid #0a6c44;
+}
+
+.kpi-card-students {
+    border-top: 4px solid #1a365d;
+}
+
+.kpi-card-users {
+    border-top: 4px solid #c46a24;
+}
+
+.kpi-card-turnout {
+    border-top: 4px solid #6366f1;
+}
+
+.diet-bar-track {
+    height: 8px;
+    border-radius: 9999px;
+    background-color: #f47d45;
+    overflow: hidden;
+    display: flex;
+}
+
+.diet-bar-veg {
+    height: 100%;
+    background-color: #10b981;
+    transition: width 0.4s ease;
+}
+
+/* Custom Badges */
+.badge-veg {
+    background-color: #d1fae5;
+    color: #065f46;
+    font-weight: 700;
+    border: 1px solid #a7f3d0;
+}
+
+.badge-nonveg {
+    background-color: #ffedd5;
+    color: #9a3412;
+    font-weight: 700;
+    border: 1px solid #fed7aa;
+}
+
+.badge-role-manager {
+    background-color: #e0f2fe;
+    color: #0369a1;
+    font-weight: 700;
+    border: 1px solid #bae6fd;
+}
+
+.badge-role-principal {
+    background-color: #f3e8ff;
+    color: #6b21a8;
+    font-weight: 700;
+    border: 1px solid #e9d5ff;
+}
+
+.badge-token-num {
+    background: #002b5c;
+    color: #ffffff;
+    font-family: monospace;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    padding: 0.2rem 0.5rem;
+    border-radius: 0.375rem;
+}
+
+/* Tab Command Center Card */
+.command-card {
+    background: #ffffff;
+    border-radius: 1rem;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    border: 1px solid #e2e8f0;
+}
+
+.search-input-field {
+    width: 100%;
+    max-width: 320px;
+}

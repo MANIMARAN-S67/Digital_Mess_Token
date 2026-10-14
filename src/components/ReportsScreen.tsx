@@ -14,13 +14,45 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ stats, logs, messU
   const [isFullLogExpanded, setIsFullLogExpanded] = useState(false);
   const [staffSearchQuery, setStaffSearchQuery] = useState('');
 
-  // Filter logs based on meal filter
+  // Filter logs based on meal filter AND selectedDate
   const filteredLogs = useMemo(() => {
-    if (selectedMealFilter === 'All Meals') {
-      return logs;
-    }
-    return logs.filter((log) => log.mealType === selectedMealFilter);
-  }, [logs, selectedMealFilter]);
+    const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    const dayOfWeek = now.getDay() || 7;
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - (dayOfWeek - 1));
+    startOfWeek.setHours(0, 0, 0, 0);
+    const startOfWeekStr = startOfWeek.toISOString().split('T')[0];
+
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfMonthStr = startOfMonth.toISOString().split('T')[0];
+
+    return logs.filter((log) => {
+      // 1. Meal filter
+      if (selectedMealFilter !== 'All Meals' && log.mealType !== selectedMealFilter) {
+        return false;
+      }
+      // 2. Date filter
+      if (selectedDate === 'Today') {
+        return log.date === todayStr;
+      }
+      if (selectedDate === 'Yesterday') {
+        return log.date === yesterdayStr;
+      }
+      if (selectedDate === 'This Week') {
+        return log.date >= startOfWeekStr;
+      }
+      if (selectedDate === 'This Month') {
+        return log.date >= startOfMonthStr;
+      }
+      return true; // 'All Time'
+    });
+  }, [logs, selectedMealFilter, selectedDate]);
 
   const displayedLogs = isFullLogExpanded ? filteredLogs : filteredLogs.slice(0, 8);
 
@@ -76,13 +108,19 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ stats, logs, messU
     document.body.removeChild(link);
   };
 
-  // Dynamic calculations based on state
-  const totalCount = stats.totalTokensIssued;
-  const vegPct = Math.round((stats.vegCount / (stats.vegCount + stats.nonVegCount || 1)) * 100);
+  // Dynamic calculations based on state and filtered logs
+  const totalCount = filteredLogs.length || stats.totalTokensIssued;
+  const vegCountFiltered = filteredLogs.filter((l) => l.dietPreference === 'Veg').length;
+  const nonVegCountFiltered = filteredLogs.filter((l) => l.dietPreference === 'Non-Veg').length;
+  const vegPct = filteredLogs.length > 0
+    ? Math.round((vegCountFiltered / (vegCountFiltered + nonVegCountFiltered || 1)) * 100)
+    : Math.round((stats.vegCount / (stats.vegCount + stats.nonVegCount || 1)) * 100);
   const nonVegPct = 100 - vegPct;
 
   // Donut chart calculations (circumference = 2 * PI * 40 ≈ 251.3)
-  const attendanceRate = stats.attendanceRate || 85;
+  const attendanceRate = filteredLogs.length > 0
+    ? Math.min(100, Math.round((filteredLogs.length / (stats.totalEligible || 120)) * 100))
+    : (stats.attendanceRate || 85);
   const strokeDashoffset = 251.3 - (251.3 * attendanceRate) / 100;
 
   // Staff summary calculations
@@ -151,6 +189,7 @@ export const ReportsScreen: React.FC<ReportsScreenProps> = ({ stats, logs, messU
                 <option>Yesterday</option>
                 <option>This Week</option>
                 <option>This Month</option>
+                <option>All Time</option>
               </select>
               <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-[#43474e] text-[18px]">
                 calendar_today

@@ -87,12 +87,12 @@ export const handleSalesforceCallback = async (code: string) => {
   return data;
 };
 
-export const getSalesforceToken = () => {
-  return localStorage.getItem('sf_access_token');
+export const getSalesforceToken = (): string | null => {
+  return localStorage.getItem('sf_access_token') || import.meta.env.VITE_SALESFORCE_ACCESS_TOKEN || null;
 };
 
-export const getSalesforceInstanceUrl = () => {
-  return localStorage.getItem('sf_instance_url');
+export const getSalesforceInstanceUrl = (): string | null => {
+  return localStorage.getItem('sf_instance_url') || import.meta.env.VITE_SALESFORCE_INSTANCE_URL || null;
 };
 
 export const logoutSalesforce = () => {

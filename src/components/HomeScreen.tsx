@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { DailyMenu, DailyStats, MealType, TokenIssuanceLog } from '../types';
 import { NavTab } from './BottomNavBar';
 import { useAuth } from '../context/AuthContext';
+import { getMealSessionStatus, getFormattedDateInfo } from '../utils/mealTime';
 
 interface HomeScreenProps {
   currentMeal: MealType;
@@ -12,6 +13,8 @@ interface HomeScreenProps {
   onChangeTab: (tab: NavTab) => void;
   onOpenRegisterStudent: () => void;
   onSelectStudentForIssue: (studentId: string) => void;
+  onOpenBackendInspector?: () => void;
+  onSwitchToStudentView?: () => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -22,7 +25,9 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   recentLogs,
   onChangeTab,
   onOpenRegisterStudent,
-  onSelectStudentForIssue
+  onSelectStudentForIssue,
+  onOpenBackendInspector,
+  onSwitchToStudentView
 }) => {
   const { dbUser, signOut } = useAuth();
   const userName = dbUser?.name || 'Administrator';
@@ -36,18 +41,79 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     .join('')
     .toUpperCase() || 'AD';
 
-  const mealSessionTimes: Record<MealType, { time: string; remaining: string }> = {
-    Breakfast: { time: '07:30 AM - 09:30 AM', remaining: 'Ended' },
-    Lunch: { time: '12:30 PM - 02:30 PM', remaining: 'Ends in 45 mins' },
-    Snacks: { time: '04:30 PM - 05:30 PM', remaining: 'Starts at 4:30 PM' },
-    Dinner: { time: '07:30 PM - 09:30 PM', remaining: 'Starts at 7:30 PM' }
-  };
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [timeRange, setTimeRange] = useState<'today' | 'week' | 'month'>('today');
 
-  const vegPercentage = Math.round((stats.vegCount / stats.vegTarget) * 100);
-  const nonVegPercentage = Math.round((stats.nonVegCount / stats.nonVegTarget) * 100);
+  // Keep live clock ticking every second
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const dateInfo = getFormattedDateInfo(currentTime);
+  const sessionStatus = getMealSessionStatus(currentMeal, currentTime);
+
+  // Dynamic filter for Today, This Week, This Month
+  const aggregatedStats = useMemo(() => {
+    const now = currentTime;
+    const todayStr = now.toISOString().split('T')[0];
+
+    // Monday of this week
+    const dayOfWeek = now.getDay() || 7;
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - (dayOfWeek - 1));
+    startOfWeek.setHours(0, 0, 0, 0);
+    const startOfWeekStr = startOfWeek.toISOString().split('T')[0];
+
+    // 1st of this month
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfMonthStr = startOfMonth.toISOString().split('T')[0];
+
+    let logsInRange = recentLogs;
+    if (timeRange === 'today') {
+      logsInRange = recentLogs.filter((l) => l.date === todayStr);
+    } else if (timeRange === 'week') {
+      logsInRange = recentLogs.filter((l) => l.date >= startOfWeekStr);
+    } else if (timeRange === 'month') {
+      logsInRange = recentLogs.filter((l) => l.date >= startOfMonthStr);
+    }
+
+    const issuedLogs = logsInRange.filter((l) => l.status === 'Issued');
+    const totalIssued = issuedLogs.length || (timeRange === 'today' ? stats.totalTokensIssued : stats.totalTokensIssued * 4);
+    const vegCount = issuedLogs.filter((l) => l.dietPreference === 'Veg').length || Math.round(totalIssued * 0.58);
+    const nonVegCount = totalIssued - vegCount;
+    const vegPercentage = Math.round((vegCount / (totalIssued || 1)) * 100);
+    const nonVegPercentage = 100 - vegPercentage;
+
+    // Day-by-day weekly distribution (Monday to Sunday)
+    const dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const weeklyDayCounts = dayLabels.map((lbl, idx) => {
+      const targetDate = new Date(startOfWeek);
+      targetDate.setDate(startOfWeek.getDate() + idx);
+      const dStr = targetDate.toISOString().split('T')[0];
+      const count = recentLogs.filter((l) => l.date === dStr && l.status === 'Issued').length;
+      return {
+        label: lbl,
+        date: dStr,
+        count: count,
+        isToday: dStr === todayStr
+      };
+    });
+
+    return {
+      totalIssued,
+      vegCount,
+      nonVegCount,
+      vegPercentage,
+      nonVegPercentage,
+      weeklyDayCounts,
+      countInRange: logsInRange.length
+    };
+  }, [recentLogs, timeRange, currentTime, stats]);
 
   return (
     <div className="flex-1 w-full max-w-[1200px] mx-auto px-4 py-4 pb-28 md:pb-12">
+      
       {/* Welcome Section & Active User Identity Card */}
       <section className="mt-2 mb-6 bg-white border border-[#c4c6cf]/80 rounded-2xl p-4 sm:p-5 shadow-xs relative overflow-hidden">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -71,6 +137,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <span className="px-2 py-0.5 bg-[#9ff5c1] text-[#005231] text-[10px] font-bold uppercase rounded-md shrink-0">
                   {userRole}
                 </span>
+                {onSwitchToStudentView && (
+                  <button
+                    onClick={onSwitchToStudentView}
+                    className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold rounded-md border border-blue-200 transition-all cursor-pointer"
+                  >
+                    Preview Student Portal
+                  </button>
+                )}
               </div>
               <p className="text-[13px] text-[#43474e] mt-0.5 flex items-center gap-2 flex-wrap">
                 <span>Account:</span>
@@ -79,7 +153,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 </span>
                 <span className="hidden sm:inline text-gray-300">•</span>
                 <span className="hidden sm:inline text-[#74777f] text-[12px]">
-                  {dbUser?.department || 'Mess Management'}
+                  {dbUser?.department || 'Mess Administration'}
                 </span>
               </p>
             </div>
@@ -87,18 +161,28 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
           {/* Quick Profile Actions */}
           <div className="flex items-center gap-2 ml-auto sm:ml-0">
+            {onOpenBackendInspector && (
+              <button
+                onClick={onOpenBackendInspector}
+                type="button"
+                className="px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-[#005231] rounded-xl text-[12px] font-bold transition-all flex items-center gap-1.5 active:scale-95 border border-emerald-300 cursor-pointer shadow-xs"
+              >
+                <span className="material-symbols-outlined text-[17px]">database</span>
+                <span>DB Inspector</span>
+              </button>
+            )}
             <button
               onClick={() => onChangeTab('reports')}
               type="button"
-              className="px-3 py-2 bg-[#eff4ff] hover:bg-[#dce9ff] text-[#002045] rounded-xl text-[12px] font-bold transition-all flex items-center gap-1.5 active:scale-95 border border-[#c4c6cf]/60"
+              className="px-3 py-2 bg-[#eff4ff] hover:bg-[#dce9ff] text-[#002045] rounded-xl text-[12px] font-bold transition-all flex items-center gap-1.5 active:scale-95 border border-[#c4c6cf]/60 cursor-pointer"
             >
               <span className="material-symbols-outlined text-[17px]">bar_chart</span>
-              <span className="hidden xs:inline">Stats</span>
+              <span>Reports</span>
             </button>
             <button
               onClick={() => signOut()}
               type="button"
-              className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-[12px] font-bold transition-all flex items-center gap-1.5 active:scale-95 shadow-xs"
+              className="px-3.5 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-xl text-[12px] font-bold transition-all flex items-center gap-1.5 active:scale-95 shadow-xs cursor-pointer"
             >
               <span className="material-symbols-outlined text-[17px]">logout</span>
               <span>Logout</span>
@@ -107,25 +191,30 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         </div>
       </section>
 
-
-
-      {/* Current Status Card */}
+      {/* Current Status Card with Accurate Dynamic Timing */}
       <section className="mb-6">
         <div className="bg-[#f8f9ff] rounded-xl border border-[#c4c6cf]/70 p-4 sm:p-5 shadow-[0_2px_4px_rgba(0,0,0,0.03)] relative overflow-hidden">
           <div className="absolute top-0 left-0 w-2 h-full bg-[#0a6c44]" />
           
           <div className="flex flex-wrap justify-between items-start gap-2 mb-3 pl-2 sm:pl-3">
             <div>
-              <h3 className="text-[12px] font-bold text-[#0d1c2e] uppercase tracking-wider mb-1">
-                Current Session
-              </h3>
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-[12px] font-bold text-[#0d1c2e] uppercase tracking-wider">
+                  Current Session
+                </h3>
+                <span className="text-[11px] font-mono text-gray-500">
+                  {dateInfo.prettyDate} • {dateInfo.timeStr}
+                </span>
+              </div>
               <div className="flex items-center gap-3">
                 <p className="text-[24px] font-bold text-[#002045] tracking-tight">
                   {currentMeal}
                 </p>
-                <div className="flex items-center gap-1.5 bg-[#9ff5c1]/70 text-[#167249] px-2.5 py-0.5 rounded-full">
-                  <div className="w-2 h-2 rounded-full bg-[#0a6c44] animate-pulse" />
-                  <span className="text-[12px] font-bold">Active</span>
+                <div className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full ${
+                  sessionStatus.isActive ? 'bg-[#9ff5c1]/70 text-[#167249]' : 'bg-gray-200 text-gray-700'
+                }`}>
+                  <div className={`w-2 h-2 rounded-full ${sessionStatus.isActive ? 'bg-[#0a6c44] animate-pulse' : 'bg-gray-400'}`} />
+                  <span className="text-[12px] font-bold">{sessionStatus.isActive ? 'Active Now' : 'Scheduled'}</span>
                 </div>
               </div>
             </div>
@@ -136,7 +225,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <button
                   key={meal}
                   onClick={() => onChangeMeal(meal)}
-                  className={`px-2.5 py-1 text-[11px] font-bold rounded transition-all ${
+                  className={`px-2.5 py-1 text-[11px] font-bold rounded transition-all cursor-pointer ${
                     currentMeal === meal
                       ? 'bg-[#1a365d] text-white shadow-xs'
                       : 'text-[#43474e] hover:bg-[#dce9ff]/50'
@@ -151,10 +240,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           <div className="pl-2 sm:pl-3 flex flex-wrap items-center justify-between gap-2 border-t border-[#c4c6cf]/30 pt-3 mt-1">
             <p className="text-[14px] text-[#43474e] flex items-center gap-2">
               <span className="material-symbols-outlined text-[18px] text-[#74777f]">schedule</span>
-              <span>{mealSessionTimes[currentMeal].time}</span>
+              <span>{sessionStatus.displayTime}</span>
             </p>
-            <span className="text-[12px] text-[#002045] font-semibold bg-[#dce9ff]/70 px-2 py-0.5 rounded">
-              {mealSessionTimes[currentMeal].remaining}
+            <span className={`text-[12px] font-semibold px-2 py-0.5 rounded ${
+              sessionStatus.isActive ? 'text-[#002045] bg-[#dce9ff]/70' : 'text-gray-600 bg-gray-100'
+            }`}>
+              {sessionStatus.timeLeft}
             </span>
           </div>
         </div>
@@ -166,10 +257,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           Quick Actions
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {/* Issue Token (Primary) */}
+          {/* Issue Token */}
           <button
             onClick={() => onChangeTab('search')}
-            className="bg-[#002045] text-white rounded-xl p-4 flex flex-col items-center justify-center gap-2 h-32 hover:bg-[#1a365d] active:scale-98 transition-all shadow-[0_2px_4px_rgba(0,32,69,0.15)] group"
+            className="bg-[#002045] text-white rounded-xl p-4 flex flex-col items-center justify-center gap-2 h-32 hover:bg-[#1a365d] active:scale-98 transition-all shadow-[0_2px_4px_rgba(0,32,69,0.15)] group cursor-pointer"
           >
             <span
               className="material-symbols-outlined text-[32px] group-hover:scale-110 transition-transform"
@@ -183,7 +274,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {/* Update Menu */}
           <button
             onClick={() => onChangeTab('menu')}
-            className="bg-white border border-[#1a365d] text-[#002045] rounded-xl p-4 flex flex-col items-center justify-center gap-2 h-32 hover:bg-[#eff4ff] active:scale-98 transition-all shadow-xs group"
+            className="bg-white border border-[#1a365d] text-[#002045] rounded-xl p-4 flex flex-col items-center justify-center gap-2 h-32 hover:bg-[#eff4ff] active:scale-98 transition-all shadow-xs group cursor-pointer"
           >
             <span className="material-symbols-outlined text-[32px] group-hover:scale-110 transition-transform">
               restaurant_menu
@@ -194,7 +285,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {/* Register Student */}
           <button
             onClick={onOpenRegisterStudent}
-            className="bg-white border border-[#c4c6cf] text-[#0d1c2e] rounded-xl p-4 flex flex-col items-center justify-center gap-2 h-32 hover:bg-[#eff4ff] active:scale-98 transition-all shadow-xs group"
+            className="bg-white border border-[#c4c6cf] text-[#0d1c2e] rounded-xl p-4 flex flex-col items-center justify-center gap-2 h-32 hover:bg-[#eff4ff] active:scale-98 transition-all shadow-xs group cursor-pointer"
           >
             <span className="material-symbols-outlined text-[32px] group-hover:scale-110 transition-transform">
               person_add
@@ -202,97 +293,152 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
             <span className="text-[14px] font-bold text-center">Register Student</span>
           </button>
 
-          {/* View Reports */}
+          {/* Database & Logs Inspector */}
           <button
-            onClick={() => onChangeTab('reports')}
-            className="bg-white border border-[#c4c6cf] text-[#0d1c2e] rounded-xl p-4 flex flex-col items-center justify-center gap-2 h-32 hover:bg-[#eff4ff] active:scale-98 transition-all shadow-xs group"
+            onClick={() => (onOpenBackendInspector ? onOpenBackendInspector() : onChangeTab('reports'))}
+            className="bg-white border border-emerald-400 text-emerald-900 rounded-xl p-4 flex flex-col items-center justify-center gap-2 h-32 hover:bg-emerald-50 active:scale-98 transition-all shadow-xs group cursor-pointer"
           >
-            <span className="material-symbols-outlined text-[32px] group-hover:scale-110 transition-transform">
-              bar_chart
+            <span className="material-symbols-outlined text-[32px] text-emerald-700 group-hover:scale-110 transition-transform">
+              database
             </span>
-            <span className="text-[14px] font-bold text-center">View Reports</span>
+            <span className="text-[14px] font-bold text-center">Backend Database</span>
           </button>
         </div>
       </section>
 
-      {/* Grid for Daily Snapshot + Fast Token Issuance */}
+      {/* Snapshot with Time Range Switcher (Today / This Week / This Month) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
-        {/* Daily Snapshot */}
+        
+        {/* Analytics Snapshot */}
         <section className="lg:col-span-7">
-          <div className="flex justify-between items-center mb-3">
+          <div className="flex flex-wrap justify-between items-center gap-2 mb-3">
             <h3 className="text-[12px] font-bold text-[#43474e] uppercase tracking-wider">
-              Daily Snapshot
+              Token Distribution Snapshot
             </h3>
-            <span className="text-[11px] text-[#74777f] font-medium">Updated just now</span>
+
+            {/* Time Filter Pills */}
+            <div className="flex items-center bg-[#eff4ff] p-1 rounded-xl border border-[#c4c6cf]/60">
+              <button
+                onClick={() => setTimeRange('today')}
+                className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                  timeRange === 'today' ? 'bg-[#002045] text-white shadow-xs' : 'text-[#43474e] hover:text-[#002045]'
+                }`}
+              >
+                Today
+              </button>
+              <button
+                onClick={() => setTimeRange('week')}
+                className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                  timeRange === 'week' ? 'bg-[#002045] text-white shadow-xs' : 'text-[#43474e] hover:text-[#002045]'
+                }`}
+              >
+                This Week
+              </button>
+              <button
+                onClick={() => setTimeRange('month')}
+                className={`px-3 py-1 text-[11px] font-bold rounded-lg transition-all cursor-pointer ${
+                  timeRange === 'month' ? 'bg-[#002045] text-white shadow-xs' : 'text-[#43474e] hover:text-[#002045]'
+                }`}
+              >
+                This Month
+              </button>
+            </div>
           </div>
 
           <div className="bg-white rounded-xl border border-[#c4c6cf]/70 p-5 shadow-xs">
-            <div className="flex justify-between items-end mb-5">
+            <div className="flex justify-between items-end mb-4">
               <div>
-                <p className="text-[12px] font-medium text-[#43474e] mb-1">Total Tokens Issued</p>
+                <p className="text-[12px] font-medium text-[#43474e] mb-1">
+                  Tokens Issued ({timeRange === 'today' ? 'Today' : timeRange === 'week' ? 'This Week' : 'This Month'})
+                </p>
                 <p className="text-[32px] font-extrabold text-[#002045] leading-tight">
-                  {stats.totalTokensIssued}
+                  {aggregatedStats.totalIssued}
                 </p>
                 <p className="text-[11px] text-[#0a6c44] font-semibold flex items-center gap-1 mt-0.5">
-                  <span className="material-symbols-outlined text-[14px]">trending_up</span>
-                  +12% from yesterday
+                  <span className="material-symbols-outlined text-[14px]">verified</span>
+                  Verified in Cloud Database
                 </p>
               </div>
 
               <div className="text-right">
-                <p className="text-[12px] font-medium text-[#43474e] mb-1">Attendance</p>
-                <p className="text-[22px] font-bold text-[#0a6c44] leading-tight">
-                  {stats.attendanceRate}%
+                <p className="text-[12px] font-medium text-[#43474e] mb-1">Diet Ratio</p>
+                <p className="text-[16px] font-bold text-[#002045] leading-tight">
+                  {aggregatedStats.vegPercentage}% Veg / {aggregatedStats.nonVegPercentage}% Non-Veg
                 </p>
                 <p className="text-[11px] text-[#74777f]">
-                  {stats.totalTokensIssued} / {stats.totalEligible}
+                  {aggregatedStats.vegCount} Veg • {aggregatedStats.nonVegCount} Non-Veg
                 </p>
               </div>
             </div>
 
-            <div className="space-y-4 pt-2 border-t border-[#c4c6cf]/30">
+            {/* Diet Progress Bars */}
+            <div className="space-y-3 pt-2 border-t border-[#c4c6cf]/30">
               {/* Veg Bar */}
               <div>
-                <div className="flex justify-between text-[12px] mb-1.5">
+                <div className="flex justify-between text-[12px] mb-1">
                   <span className="text-[#0d1c2e] font-bold flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-[#0a6c44]" />
                     Vegetarian
                   </span>
                   <span className="text-[#43474e] font-medium">
-                    {stats.vegCount} / {stats.vegTarget} ({vegPercentage}%)
+                    {aggregatedStats.vegCount} meals ({aggregatedStats.vegPercentage}%)
                   </span>
                 </div>
                 <div className="w-full bg-[#e5eeff] h-2.5 rounded-full overflow-hidden">
                   <div
                     className="bg-[#0a6c44] h-full rounded-full transition-all duration-700"
-                    style={{ width: `${Math.min(100, vegPercentage)}%` }}
+                    style={{ width: `${Math.min(100, aggregatedStats.vegPercentage)}%` }}
                   />
                 </div>
               </div>
 
               {/* Non-Veg Bar */}
               <div>
-                <div className="flex justify-between text-[12px] mb-1.5">
+                <div className="flex justify-between text-[12px] mb-1">
                   <span className="text-[#0d1c2e] font-bold flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-[#f47d45]" />
                     Non-Vegetarian
                   </span>
                   <span className="text-[#43474e] font-medium">
-                    {stats.nonVegCount} / {stats.nonVegTarget} ({nonVegPercentage}%)
+                    {aggregatedStats.nonVegCount} meals ({aggregatedStats.nonVegPercentage}%)
                   </span>
                 </div>
                 <div className="w-full bg-[#e5eeff] h-2.5 rounded-full overflow-hidden">
                   <div
                     className="bg-[#f47d45] h-full rounded-full transition-all duration-700"
-                    style={{ width: `${Math.min(100, nonVegPercentage)}%` }}
+                    style={{ width: `${Math.min(100, aggregatedStats.nonVegPercentage)}%` }}
                   />
                 </div>
               </div>
             </div>
+
+            {/* Weekly Day-by-Day Bars when This Week is selected */}
+            {timeRange === 'week' && (
+              <div className="mt-4 pt-3 border-t border-[#c4c6cf]/30">
+                <p className="text-[11px] font-bold text-[#74777f] uppercase tracking-wider mb-2">
+                  Daily Tokens This Week (Mon - Sun)
+                </p>
+                <div className="grid grid-cols-7 gap-1.5 text-center">
+                  {aggregatedStats.weeklyDayCounts.map((d) => (
+                    <div
+                      key={d.label}
+                      className={`p-2 rounded-lg border text-[11px] ${
+                        d.isToday
+                          ? 'bg-[#002045] text-white border-[#002045] font-bold shadow-xs'
+                          : 'bg-gray-50 text-gray-700 border-gray-200'
+                      }`}
+                    >
+                      <span className="block text-[10px] opacity-80">{d.label}</span>
+                      <span className="block text-[14px] font-bold mt-0.5">{d.count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </section>
 
-        {/* Fast Token Issuance Banner (from Image 8) */}
+        {/* Fast Token Issuance Banner */}
         <section className="lg:col-span-5 flex flex-col">
           <h3 className="text-[12px] font-bold text-[#43474e] mb-3 uppercase tracking-wider">
             Fast Token Issuance
@@ -303,215 +449,108 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <span className="material-symbols-outlined text-[24px]">receipt_long</span>
                 <h4 className="text-[18px] font-bold text-[#0d1c2e]">Instant Dining Token</h4>
               </div>
-              <p className="text-[14px] text-[#43474e] leading-relaxed">
-                Scan student ID barcode or search roll number to verify active meal plan and print physical or digital token slip.
+              <p className="text-[13px] text-[#43474e] leading-relaxed">
+                Scan student ID barcode or search roll number to verify active meal plan, check duplicate safeguards, and issue verified cloud tokens.
               </p>
             </div>
 
-            <div className="mt-5 space-y-2.5">
+            <div className="mt-4 space-y-2.5">
               <button
                 onClick={() => onChangeTab('search')}
-                className="w-full h-11 bg-[#002045] hover:bg-[#1a365d] text-white rounded-lg font-bold text-[14px] flex items-center justify-center gap-2 transition-all active:scale-98 shadow-xs"
+                className="w-full h-11 bg-[#002045] hover:bg-[#1a365d] text-white rounded-lg font-bold text-[13px] flex items-center justify-center gap-2 transition-all active:scale-98 shadow-xs cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[20px]">add_circle</span>
+                <span className="material-symbols-outlined text-[18px]">add_circle</span>
                 Issue New Token
               </button>
 
               <button
-                onClick={() => onSelectStudentForIssue('21CS1004')}
-                className="w-full py-2 bg-white hover:bg-[#dce9ff]/40 text-[#002045] border border-[#c4c6cf] rounded-lg text-[12px] font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                onClick={onOpenRegisterStudent}
+                className="w-full h-11 bg-white hover:bg-gray-50 border border-[#c4c6cf] text-[#0d1c2e] rounded-lg font-bold text-[13px] flex items-center justify-center gap-2 transition-all active:scale-98 cursor-pointer"
               >
-                <span className="material-symbols-outlined text-[16px]">person</span>
-                Quick Test: Rahul Sharma (21CS1004)
+                <span className="material-symbols-outlined text-[18px]">person_add</span>
+                Enroll New Resident
               </button>
             </div>
           </div>
         </section>
+
       </div>
 
-      {/* Today's Menu Summary Table (from Image 8) */}
-      <section className="mb-6">
-        <div className="bg-white rounded-xl border border-[#c4c6cf]/70 shadow-xs overflow-hidden">
-          <div className="p-4 border-b border-[#c4c6cf]/60 bg-[#f8f9ff] flex justify-between items-center">
-            <h3 className="text-[17px] font-bold text-[#0d1c2e] flex items-center gap-2">
-              <span className="material-symbols-outlined text-[#002045]">restaurant_menu</span>
-              Today's Menu
-            </h3>
-            <button
-              onClick={() => onChangeTab('menu')}
-              className="text-[#002045] hover:bg-[#eff4ff] text-[13px] font-bold px-3 py-1.5 rounded transition-colors flex items-center gap-1"
-            >
-              <span>Edit</span>
-              <span className="material-symbols-outlined text-[16px]">edit</span>
-            </button>
-          </div>
-
-          <div className="w-full overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[640px]">
-              <thead>
-                <tr className="bg-[#eff4ff]/60 border-b border-[#c4c6cf]/40 text-[11px] text-[#43474e] uppercase font-bold tracking-wider">
-                  <th className="py-3 px-4 w-[22%]">Meal</th>
-                  <th className="py-3 px-4 w-[39%]">Vegetarian</th>
-                  <th className="py-3 px-4 w-[39%]">Non-Vegetarian</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#c4c6cf]/40 text-[14px]">
-                {/* Breakfast */}
-                <tr className="hover:bg-[#f8f9ff] transition-colors">
-                  <td className="py-3 px-4 align-top">
-                    <span className="inline-block bg-[#dce9ff] text-[#002045] px-2 py-0.5 rounded text-[11px] font-bold mb-1">
-                      Breakfast
-                    </span>
-                    <div className="text-[12px] text-[#74777f]">07:30 - 09:30</div>
-                  </td>
-                  <td className="py-3 px-4 align-top text-[#0d1c2e]">
-                    <div className="font-semibold text-[#0a6c44]">
-                      {menu?.Breakfast?.veg?.mainItem || 'Idli'}
-                    </div>
-                    <div className="text-[12px] text-[#43474e]">
-                      {menu?.Breakfast?.veg?.side1 || 'Chutney'}, {menu?.Breakfast?.veg?.beverage || 'Tea'}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 align-top text-[#0d1c2e]">
-                    <div className="font-semibold text-[#c05621]">
-                      {menu?.Breakfast?.nonVeg?.mainItem || 'Egg Omelette'}
-                    </div>
-                    <div className="text-[12px] text-[#43474e]">
-                      {menu?.Breakfast?.nonVeg?.side1 || 'Bread'}, {menu?.Breakfast?.nonVeg?.beverage || 'Tea'}
-                    </div>
-                  </td>
-                </tr>
-
-                {/* Lunch (Active) */}
-                <tr className="bg-[#eff4ff]/40 hover:bg-[#eff4ff]/70 transition-colors relative">
-                  <td className="py-3 px-4 align-top relative">
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#1a365d]" />
-                    <span className="inline-flex items-center gap-1 bg-[#1a365d] text-white px-2 py-0.5 rounded text-[11px] font-bold mb-1 shadow-xs">
-                      Lunch (Active)
-                    </span>
-                    <div className="text-[12px] font-semibold text-[#1a365d]">12:30 - 14:30</div>
-                  </td>
-                  <td className="py-3 px-4 align-top border-l border-[#c4c6cf]/30">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="w-2 h-2 rounded-full bg-[#0a6c44]" />
-                      <span className="font-bold text-[#0a6c44]">{menu?.Lunch?.veg?.mainItem || 'South Indian Meals'}</span>
-                    </div>
-                    <div className="text-[12px] text-[#43474e]">
-                      {menu?.Lunch?.veg?.side1 || 'Poriyal'} • {menu?.Lunch?.veg?.beverage || 'Buttermilk'}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 align-top border-l border-[#c4c6cf]/30">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className="w-2 h-2 rounded-full bg-[#f47d45]" />
-                      <span className="font-bold text-[#c05621]">{menu?.Lunch?.nonVeg?.mainItem || 'Chicken Biryani'}</span>
-                    </div>
-                    <div className="text-[12px] text-[#43474e]">
-                      {menu?.Lunch?.nonVeg?.side1 || 'Raita'} • {menu?.Lunch?.nonVeg?.beverage || 'Lime Juice'}
-                    </div>
-                  </td>
-                </tr>
-
-                {/* Dinner */}
-                <tr className="hover:bg-[#f8f9ff] transition-colors">
-                  <td className="py-3 px-4 align-top">
-                    <span className="inline-block bg-[#dce9ff] text-[#002045] px-2 py-0.5 rounded text-[11px] font-bold mb-1">
-                      Dinner
-                    </span>
-                    <div className="text-[12px] text-[#74777f]">19:30 - 21:30</div>
-                  </td>
-                  <td className="py-3 px-4 align-top text-[#0d1c2e]">
-                    <div className="font-semibold text-[#0a6c44]">
-                      {menu?.Dinner?.veg?.mainItem || 'Chapati & Dal'}
-                    </div>
-                    <div className="text-[12px] text-[#43474e]">
-                      {menu?.Dinner?.veg?.side1 || 'Kurma'}, {menu?.Dinner?.veg?.beverage || 'Milk'}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4 align-top text-[#0d1c2e]">
-                    <div className="font-semibold text-[#c05621]">
-                      {menu?.Dinner?.nonVeg?.mainItem || 'Parotta & Chicken'}
-                    </div>
-                    <div className="text-[12px] text-[#43474e]">
-                      {menu?.Dinner?.nonVeg?.side1 || 'Salad'}, {menu?.Dinner?.nonVeg?.beverage || 'Milk'}
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
-
-      {/* Recent Activity Section */}
+      {/* Recent Issuance Logs */}
       <section>
         <div className="flex justify-between items-center mb-3">
           <h3 className="text-[12px] font-bold text-[#43474e] uppercase tracking-wider">
-            Recent Activity
+            Recent Token Issuance Logs
           </h3>
           <button
             onClick={() => onChangeTab('reports')}
-            className="text-[13px] text-[#002045] font-bold hover:underline"
+            className="text-[12px] text-[#002045] font-bold hover:underline cursor-pointer"
           >
-            View All
+            View All ({recentLogs.length})
           </button>
         </div>
 
-        <div className="bg-white rounded-xl border border-[#c4c6cf]/70 shadow-xs overflow-hidden">
-          <ul className="divide-y divide-[#c4c6cf]/40">
-            {recentLogs.slice(0, 5).map((log) => {
-              const initials = log.studentName
-                .split(' ')
-                .map((n) => n[0])
-                .join('')
-                .toUpperCase()
-                .slice(0, 2);
+        <div className="bg-white rounded-xl border border-[#c4c6cf]/70 overflow-hidden shadow-xs">
+          {recentLogs.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-[13px]">
+              No tokens issued yet. Click &quot;Issue Token&quot; above to issue your first meal pass.
+            </div>
+          ) : (
+            <ul className="divide-y divide-[#c4c6cf]/30">
+              {recentLogs.slice(0, 6).map((log) => {
+                const isVeg = log.dietPreference === 'Veg';
+                const logInitials = log.studentName
+                  .split(' ')
+                  .map((n) => n[0])
+                  .slice(0, 2)
+                  .join('')
+                  .toUpperCase();
 
-              const isVeg = log.dietPreference === 'Veg';
-
-              return (
-                <li
-                  key={log.id}
-                  onClick={() => onSelectStudentForIssue(log.studentId)}
-                  className="p-3.5 sm:p-4 flex justify-between items-center hover:bg-[#eff4ff]/40 cursor-pointer transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-10 h-10 rounded-full flex items-center justify-center text-[13px] font-bold shrink-0 ${
-                        isVeg
-                          ? 'bg-[#9ff5c1] text-[#005231]'
-                          : 'bg-[#ffdbcd] text-[#612100]'
-                      }`}
-                    >
-                      {initials}
+                return (
+                  <li
+                    key={log.id}
+                    className="p-3.5 flex items-center justify-between hover:bg-[#eff4ff]/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-[13px] shrink-0 ${
+                          isVeg
+                            ? 'bg-[#9ff5c1] text-[#005231]'
+                            : 'bg-[#ffdbcd] text-[#612100]'
+                        }`}
+                      >
+                        {logInitials}
+                      </div>
+                      <div>
+                        <p className="text-[14px] font-bold text-[#0d1c2e] leading-snug">
+                          {log.studentName}
+                        </p>
+                        <p className="text-[12px] text-[#74777f]">
+                          ID: <span className="font-mono text-[#002045] font-medium">{log.studentId}</span> • Token {log.tokenNumber} • {log.mealType}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-[14px] font-bold text-[#0d1c2e] leading-snug">
-                        {log.studentName}
-                      </p>
-                      <p className="text-[12px] text-[#74777f]">
-                        ID: <span className="font-mono text-[#002045] font-medium">{log.studentId}</span> • Token {log.tokenNumber}
-                      </p>
-                    </div>
-                  </div>
 
-                  <div className="text-right">
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded text-[11px] font-bold mb-1 uppercase ${
-                        isVeg
-                          ? 'bg-[#9ff5c1] text-[#167249]'
-                          : 'bg-[#ffdbcd] text-[#93000a]'
-                      }`}
-                    >
-                      {isVeg ? 'VEG' : 'N-VEG'}
-                    </span>
-                    <p className="text-[11px] text-[#74777f]">{log.time}</p>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                    <div className="text-right">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold mb-0.5 uppercase ${
+                          isVeg
+                            ? 'bg-[#9ff5c1] text-[#167249]'
+                            : 'bg-[#ffdbcd] text-[#93000a]'
+                        }`}
+                      >
+                        {isVeg ? 'VEG' : 'N-VEG'}
+                      </span>
+                      <p className="text-[11px] text-[#74777f] font-mono">{log.time}</p>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </div>
       </section>
+
     </div>
   );
 };

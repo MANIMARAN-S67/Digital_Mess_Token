@@ -7,6 +7,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>Student__c.Academic_Year__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>Student__c.Department__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -73,6 +78,16 @@
     <fieldPermissions>
         <editable>true</editable>
         <field>Meal_Token__c.Decline_Reason__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Meal_Token__c.Issued_By_User__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>Meal_Token__c.Issued_By__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <custom>false</custom>

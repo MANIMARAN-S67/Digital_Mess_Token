@@ -12,7 +12,23 @@ import {
 import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
 import { initiateSalesforceOAuth, getSalesforceToken, handleSalesforceCallback, logoutSalesforce } from '../services/salesforceAuth';
 import sfApi from '../services/salesforceApi';
+import { salesforceSyncService } from '../services/salesforceSyncService';
 import { UserProfile } from '../types';
+
+/**
+ * Checks if an email or identifier belongs to a student.
+ * Students are strictly forbidden from logging in on this administrative portal.
+ */
+export const isStudentIdentifier = (emailOrId: string): boolean => {
+  if (!emailOrId) return false;
+  const clean = emailOrId.trim().toLowerCase();
+  const localPart = clean.split('@')[0];
+  if (localPart.includes('student')) return true;
+  // Student roll numbers like 21cs1004, 22ec1012, 23me1055, or stu- prefix
+  if (/^(stu-|\d{2}[a-z]{2}\d{4})/i.test(localPart)) return true;
+  if (/^\d{4,12}$/.test(localPart)) return true;
+  return false;
+};
 
 interface AuthContextType {
   dbUser: UserProfile | null;
@@ -22,14 +38,17 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   signInWithSalesforce: () => Promise<void>;
   signInWithEmail: (email: string, pass: string) => Promise<void>;
-  signUpWithEmail: (email: string, pass: string, name: string, phone?: string) => Promise<void>;
+  signUpWithEmail: (email: string, pass: string, name: string, phone?: string, role?: 'Mess Manager' | 'College Principal') => Promise<void>;
   loginWithStudentId: (identifier: string) => Promise<void>;
-  loginAsDemoUser: (role?: 'Admin' | 'Student') => void;
+  loginAsDemoUser: (role?: 'Mess Manager' | 'College Principal' | 'Admin') => void;
   signOut: () => Promise<void>;
   verifyOtp: (email: string, otp: string) => Promise<void>;
   checkEmailExists: (email: string) => Promise<boolean>;
-  sendPhoneOtp: (phone: string) => Promise<{ success: boolean; otp: string }>;
+  checkPhoneExists: (phone: string) => Promise<boolean>;
+  sendPhoneOtp: (phone: string, checkDuplicate?: boolean) => Promise<{ success: boolean; otp: string }>;
+  sendLoginPhoneOtp: (phone: string) => Promise<{ success: boolean; otp: string }>;
   verifyPhoneOtp: (phone: string, otp: string) => Promise<boolean>;
+  signInWithPhoneOtp: (phone: string, otp: string) => Promise<void>;
   sendPasswordResetOtp: (email: string) => Promise<{ success: boolean; otp: string; message: string }>;
   resetPasswordWithOtp: (email: string, otp: string, newPassword: string) => Promise<{ success: boolean; message: string }>;
 }
@@ -48,6 +67,44 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const clearAuthError = () => setAuthError(null);
 
   /**
+   * Logs login attempts into Firebase Firestore `login_logs` collection and local cache.
+   */
+  const recordLoginLog = async (profile: UserProfile, method: string) => {
+    try {
+      const logId = `log_${Date.now()}_${Math.floor(1000 + Math.random() * 9000)}`;
+      const logEntry = {
+        id: logId,
+        userId: profile.studentId || profile.Id,
+        email: profile.email,
+        name: profile.name,
+        role: profile.role,
+        phone: profile.phone || '',
+        method,
+        timestamp: new Date().toISOString(),
+        status: 'SUCCESS' as const,
+        userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : ''
+      };
+
+      // 1. Update local cache for instant inspector view
+      try {
+        const cached = JSON.parse(localStorage.getItem('mess_login_logs_cache') || '[]');
+        localStorage.setItem('mess_login_logs_cache', JSON.stringify([logEntry, ...cached.slice(0, 99)]));
+      } catch (e) {}
+
+      // 2. Persist to Firestore
+      try {
+        await setDoc(doc(db, 'login_logs', logId), {
+          ...logEntry,
+          createdAt: serverTimestamp()
+        });
+        console.log('Login audit record stored in backend:', logId);
+      } catch (fsErr) {
+        console.warn('Firestore login log record notice:', fsErr);
+      }
+    } catch (e) {}
+  };
+
+  /**
    * Synchronizes user profile to Firestore backend, Salesforce (if connected),
    * and local/session persistence to ensure profile data is never lost.
    */
@@ -59,24 +116,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const email = fbUser.email.trim();
     const uid = fbUser.uid;
-    const displayName = fbUser.displayName || email.split('@')[0];
+    const lowerEmail = email.toLowerCase();
+
+    // STRICT ROLE & STUDENT ACCESS RESTRICTION:
+    // Only Mess Manager and College Principal are authorized. Students cannot log in!
+    if (isStudentIdentifier(email) || overrides?.role === 'Student') {
+      await firebaseSignOut(auth).catch(() => {});
+      sessionStorage.removeItem('mess_session_user');
+      sessionStorage.removeItem('firebase_email');
+      const accessErr = "Access Denied: Only Mess Managers and the College Principal are authorized to access this portal with their email. Students are not allowed to log in here.";
+      setAuthError(accessErr);
+      throw new Error(accessErr);
+    }
+
+    const displayName = fbUser.displayName || (lowerEmail.includes('principal') ? 'College Principal' : 'Mess Manager');
     const photoUrl = fbUser.photoURL || '';
 
-    const lowerEmail = email.toLowerCase();
-    const isAdmin = lowerEmail.includes('admin') || lowerEmail.includes('warden') || lowerEmail.includes('secretary') || lowerEmail.includes('mess');
-    const initialRole: UserProfile['role'] = isAdmin ? 'Admin' : 'Student';
+    const isPrincipal = lowerEmail.includes('principal') || overrides?.role === 'College Principal';
+    const assignedRole: UserProfile['role'] = isPrincipal ? 'College Principal' : 'Mess Manager';
+    const assignedDept = isPrincipal ? 'College Administration' : 'Central Mess Management';
+    const assignedRoom = isPrincipal ? 'Principal Executive Office' : 'Mess Manager Office - Ground Floor';
 
     let userProfile: UserProfile = {
       Id: uid,
       studentId: uid,
       uid: uid,
       name: displayName,
-      role: initialRole,
+      role: assignedRole,
       preference: 'Veg',
       email: email,
       photoUrl: photoUrl,
-      department: isAdmin ? 'Central Mess Administration' : 'Computer Science',
-      hostelRoom: isAdmin ? 'Admin Office - Block A' : 'BH-1 / 101',
+      department: assignedDept,
+      hostelRoom: assignedRoom,
       lastLogin: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       ...overrides
@@ -89,13 +160,24 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       if (userSnap.exists()) {
         const existingData = userSnap.data() as Partial<UserProfile>;
+        // If an existing registered record is a student, forbid access
+        if (existingData.role === 'Student') {
+          await firebaseSignOut(auth).catch(() => {});
+          sessionStorage.removeItem('mess_session_user');
+          const accessErr = "Access Denied: Student accounts are not permitted to log in. Only Mess Managers and College Principals have access.";
+          setAuthError(accessErr);
+          throw new Error(accessErr);
+        }
+
         userProfile = {
           ...userProfile,
           ...existingData,
           email: email, // Always preserve real authenticated email
           uid: uid,
           Id: uid,
-          studentId: existingData.studentId || uid,
+          role: overrides?.role || (existingData.role === 'College Principal' ? 'College Principal' : 'Mess Manager'),
+          studentId: overrides?.studentId || existingData.studentId || uid,
+          phone: overrides?.phone || existingData.phone || userProfile.phone || '',
           name: overrides?.name || existingData.name || displayName,
           photoUrl: photoUrl || existingData.photoUrl || '',
           lastLogin: new Date().toISOString()
@@ -107,80 +189,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         ...userProfile,
         email: email,
         uid: uid,
+        phone: userProfile.phone || '',
         displayName: userProfile.name,
+        role: userProfile.role,
+        department: userProfile.department,
         lastLogin: serverTimestamp(),
         updatedAt: serverTimestamp()
       }, { merge: true });
 
-      console.log('User profile successfully stored in backend for:', email);
+      // Cache user locally for offline visibility and inspector
+      try {
+        const cachedUsers = JSON.parse(localStorage.getItem('mess_users_cloud_cache') || '[]');
+        const updated = [userProfile, ...cachedUsers.filter((u: any) => u.email !== userProfile.email)];
+        localStorage.setItem('mess_users_cloud_cache', JSON.stringify(updated.slice(0, 50)));
+      } catch (e) {}
+
+      // Record successful login in audit log
+      recordLoginLog(userProfile, overrides?.loginProvider || 'Mess Manager / Principal Auth');
     } catch (firestoreErr) {
+      if (firestoreErr instanceof Error && firestoreErr.message.includes('Access Denied')) {
+        throw firestoreErr;
+      }
       console.warn('Backend Firestore note (offline or rules fallback):', firestoreErr);
     }
 
-    // 2. Sync with Salesforce backend if connected
+    // 2. Sync user login details to Salesforce Mess_User__c backend
     if (getSalesforceToken()) {
-      // 2A. Upsert into Mess_User__c object (tracks who is logged in and issuing tokens)
       try {
-        const nowIso = new Date().toISOString();
-        const sfUserQuery = await sfApi.query(`SELECT Id, Name, Email__c, Role__c, Tokens_Issued_Today__c, Total_Tokens_Issued__c FROM Mess_User__c WHERE Email__c = '${email}' LIMIT 1`);
-        
-        if (sfUserQuery && sfUserQuery.records && sfUserQuery.records.length > 0) {
-          const existingMessUser = sfUserQuery.records[0];
-          userProfile.sfUserId = existingMessUser.Id;
-          await sfApi.patch(`/sobjects/Mess_User__c/${existingMessUser.Id}`, {
-            Last_Login__c: nowIso,
-            Login_Provider__c: overrides?.loginProvider || 'Google',
-            Status__c: 'Active',
-            Is_Currently_Active__c: true,
-            Photo_URL__c: photoUrl || ''
-          }).catch(() => {});
-        } else {
-          const createRes = await sfApi.post('/sobjects/Mess_User__c', {
-            Name: userProfile.name,
-            Email__c: email,
-            Role__c: userProfile.role,
-            Firebase_UID__c: uid,
-            Last_Login__c: nowIso,
-            Login_Provider__c: overrides?.loginProvider || 'Google',
-            Assigned_Mess_Hall__c: userProfile.hostelRoom || 'Central Mess Hall A',
-            Status__c: 'Active',
-            Is_Currently_Active__c: true,
-            Can_Issue_Tokens__c: true,
-            Total_Logins__c: 1,
-            Tokens_Issued_Today__c: 0,
-            Total_Tokens_Issued__c: 0,
-            Photo_URL__c: photoUrl || ''
-          }).catch(() => null);
-          if (createRes && createRes.id) {
-            userProfile.sfUserId = createRes.id;
-          }
+        const sfId = await salesforceSyncService.syncUserLogin(userProfile);
+        if (sfId) {
+          userProfile.sfUserId = sfId;
         }
       } catch (sfUserErr) {
         console.warn('Salesforce Mess_User__c sync notice:', sfUserErr);
       }
-
-      // 2B. Query Student__c if user is a student
-      try {
-        const soql = `SELECT Id, Name, Student_ID__c, Department__c, Academic_Year__c, Hostel_Room__c, Diet_Preference__c, Email__c, Role__c FROM Student__c WHERE Email__c = '${email}' LIMIT 1`;
-        const result = await sfApi.query(soql);
-        if (result && result.records && result.records.length > 0) {
-          const student = result.records[0];
-          userProfile = {
-            ...userProfile,
-            studentId: student.Student_ID__c || student.Id,
-            name: student.Name || userProfile.name,
-            role: (student.Role__c as UserProfile['role']) || 'Student',
-            preference: student.Diet_Preference__c || userProfile.preference,
-            department: student.Department__c || userProfile.department,
-            hostelRoom: student.Hostel_Room__c || userProfile.hostelRoom,
-            email: student.Email__c || email
-          };
-        }
-      } catch (sfErr) {
-        console.warn('Salesforce student query error:', sfErr);
-      }
     }
-
 
     // 3. Cache locally for immediate fast loads and offline resilience
     try {
@@ -194,72 +237,76 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const fetchSalesforceUser = async (email: string) => {
     try {
-      const soql = `SELECT Id, Name, Student_ID__c, Department__c, Academic_Year__c, Hostel_Room__c, Diet_Preference__c, Email__c, Firebase_UID__c, Role__c FROM Student__c WHERE Email__c = '${email}' LIMIT 1`;
-      const result = await sfApi.query(soql);
-      
-      if (result && result.records && result.records.length > 0) {
-        const student = result.records[0];
-        const profile: UserProfile = {
-          Id: student.Id,
-          studentId: student.Student_ID__c || student.Id,
-          name: student.Name,
-          role: (student.Role__c as UserProfile['role']) || 'Student',
-          preference: student.Diet_Preference__c || 'Veg',
-          email: student.Email__c,
-          department: student.Department__c,
-          hostelRoom: student.Hostel_Room__c
-        };
-        sessionStorage.setItem('mess_session_user', JSON.stringify(profile));
-        setDbUser(profile);
-      } else {
-        // Check Salesforce User table by email
-        try {
-          const sfUserRes = await sfApi.query(`SELECT Id, Name, Email FROM User WHERE Email = '${email}' LIMIT 1`);
-          if (sfUserRes && sfUserRes.records && sfUserRes.records.length > 0) {
-            const sfUser = sfUserRes.records[0];
-            const profile: UserProfile = {
-              Id: sfUser.Id,
-              studentId: sfUser.Id,
-              name: sfUser.Name || auth.currentUser?.displayName || 'Mess Admin',
-              role: 'Admin',
-              preference: 'Veg',
-              email: sfUser.Email || email,
-              department: 'Mess Management',
-              hostelRoom: 'Admin Office'
-            };
-            sessionStorage.setItem('mess_session_user', JSON.stringify(profile));
-            setDbUser(profile);
-            return;
-          }
-        } catch (uErr) {
-          console.warn('Could not query Salesforce User table by email:', uErr);
-        }
-
-        const profile: UserProfile = {
-          Id: auth.currentUser?.uid || 'admin-' + Date.now(),
-          studentId: auth.currentUser?.uid || 'admin-' + Date.now(),
-          name: auth.currentUser?.displayName || 'Mess Admin',
-          role: 'Admin',
-          preference: 'Veg',
-          email: email,
-          department: 'Mess Management',
-          hostelRoom: 'Admin Office'
-        };
-        sessionStorage.setItem('mess_session_user', JSON.stringify(profile));
-        setDbUser(profile);
+      // 1. Strict check: If student email, block immediately
+      if (isStudentIdentifier(email)) {
+        await firebaseSignOut(auth).catch(() => {});
+        setAuthError("Access Denied: Only Mess Managers and the College Principal are authorized to access this portal with their email. Students are not allowed to log in here.");
+        setDbUser(null);
+        return;
       }
+
+      // 2. Check if student exists in Salesforce Student__c table
+      try {
+        const studRes = await sfApi.query(`SELECT Id, Name, Student_ID__c FROM Student__c WHERE Email__c = '${email}' LIMIT 1`);
+        if (studRes && studRes.records && studRes.records.length > 0) {
+          await firebaseSignOut(auth).catch(() => {});
+          setAuthError("Access Denied: Student accounts are not permitted to log in. Only Mess Managers and College Principals have access.");
+          setDbUser(null);
+          return;
+        }
+      } catch {}
+
+      // 3. Query Mess_User__c table in Salesforce
+      const isPrincipal = email.toLowerCase().includes('principal');
+      const messUserRes = await sfApi.query(`SELECT Id, Name, Email__c, Phone__c, Role__c, Department__c FROM Mess_User__c WHERE Email__c = '${email}' LIMIT 1`);
+      
+      if (messUserRes && messUserRes.records && messUserRes.records.length > 0) {
+        const mu = messUserRes.records[0];
+        const profile: UserProfile = {
+          Id: mu.Id,
+          sfUserId: mu.Id,
+          studentId: mu.Id,
+          name: mu.Name || (isPrincipal ? 'College Principal' : 'Mess Manager'),
+          role: (mu.Role__c as UserProfile['role']) || (isPrincipal ? 'College Principal' : 'Mess Manager'),
+          preference: 'Veg',
+          email: mu.Email__c || email,
+          phone: mu.Phone__c || '',
+          department: mu.Department__c || (isPrincipal ? 'College Administration' : 'Central Mess Management'),
+          hostelRoom: isPrincipal ? 'Principal Executive Office' : 'Mess Manager Office'
+        };
+        sessionStorage.setItem('mess_session_user', JSON.stringify(profile));
+        setDbUser(profile);
+        return;
+      }
+
+      // 4. Upsert new Mess_User__c in Salesforce
+      const profile: UserProfile = {
+        Id: auth.currentUser?.uid || 'user-' + Date.now(),
+        studentId: auth.currentUser?.uid || 'user-' + Date.now(),
+        name: auth.currentUser?.displayName || (isPrincipal ? 'College Principal' : 'Mess Manager'),
+        role: isPrincipal ? 'College Principal' : 'Mess Manager',
+        preference: 'Veg',
+        email: email,
+        department: isPrincipal ? 'College Administration' : 'Central Mess Management',
+        hostelRoom: isPrincipal ? 'Principal Executive Office' : 'Mess Manager Office'
+      };
+      const sfId = await salesforceSyncService.syncUserLogin(profile);
+      if (sfId) profile.sfUserId = sfId;
+      sessionStorage.setItem('mess_session_user', JSON.stringify(profile));
+      setDbUser(profile);
     } catch (error: any) {
       console.error('Failed to fetch user from Salesforce:', error);
+      const isPrincipal = email.toLowerCase().includes('principal');
       const fallbackUid = auth.currentUser?.uid || 'user-' + Date.now();
       const profile: UserProfile = {
         Id: fallbackUid,
         studentId: fallbackUid,
-        name: auth.currentUser?.displayName || email.split('@')[0],
-        role: 'Admin',
+        name: auth.currentUser?.displayName || (isPrincipal ? 'College Principal' : 'Mess Manager'),
+        role: isPrincipal ? 'College Principal' : 'Mess Manager',
         preference: 'Veg',
         email: email,
-        department: 'Mess Administration',
-        hostelRoom: 'Room 101'
+        department: isPrincipal ? 'College Administration' : 'Central Mess Management',
+        hostelRoom: isPrincipal ? 'Principal Executive Office' : 'Mess Manager Office'
       };
       sessionStorage.setItem('mess_session_user', JSON.stringify(profile));
       setDbUser(profile);
@@ -360,6 +407,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const user = result.user;
       
       if (user.email) {
+        // STRICT BLOCK: If student email, sign out immediately
+        if (isStudentIdentifier(user.email)) {
+          await firebaseSignOut(auth).catch(() => {});
+          sessionStorage.removeItem('mess_session_user');
+          sessionStorage.removeItem('firebase_email');
+          const accessErr = "Access Denied: Only Mess Managers and the College Principal are authorized to access this portal with their email. Students are not allowed to log in here.";
+          setAuthError(accessErr);
+          return;
+        }
+
         // Store and synchronize profile in backend
         const profile = await syncUserProfileToBackend({
           uid: user.uid,
@@ -371,15 +428,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (profile) {
           setDbUser(profile);
         } else {
+          const isPrincipal = user.email.toLowerCase().includes('principal');
           const fallback: UserProfile = {
             Id: user.uid,
             studentId: user.uid,
             name: user.displayName || user.email.split('@')[0],
-            role: 'Admin',
+            role: isPrincipal ? 'College Principal' : 'Mess Manager',
             preference: 'Veg',
             email: user.email,
-            department: 'Mess Management',
-            hostelRoom: 'Admin Office'
+            department: isPrincipal ? 'College Administration' : 'Central Mess Management',
+            hostelRoom: isPrincipal ? 'Principal Executive Office' : 'Mess Manager Office'
           };
           sessionStorage.setItem('mess_session_user', JSON.stringify(fallback));
           setDbUser(fallback);
@@ -389,7 +447,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     } catch (error: any) {
       console.error("Google Sign In Error", error);
-      if (error?.code === 'auth/configuration-not-found') {
+      if (error?.message && error.message.includes('Access Denied')) {
+        setAuthError(error.message);
+      } else if (error?.code === 'auth/configuration-not-found') {
         setAuthError("Google Sign-In provider or API key needs activation. You can use Email/Password login or Demo Login below.");
       } else if (error?.code === 'auth/popup-closed-by-user') {
         setAuthError("Sign-in was cancelled (popup closed). Click again to choose an account.");
@@ -431,25 +491,122 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const sendPhoneOtp = async (phone: string): Promise<{ success: boolean; otp: string }> => {
-    const cleanPhone = phone.trim().replace(/\D/g, '');
+  const checkPhoneExists = async (phoneToTest: string): Promise<boolean> => {
+    const cleanPhone = phoneToTest.trim().replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length !== 10) return false;
+
+    // Check Firebase Firestore 'users' collection
+    try {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('phone', '==', cleanPhone));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) return true;
+    } catch (e) {
+      console.warn('Firestore phone uniqueness check note:', e);
+    }
+
+    // Check locally registered cache
+    try {
+      const cachedUsers = JSON.parse(localStorage.getItem('registered_users_cache') || '[]');
+      const inCache = cachedUsers.some((u: any) => {
+        const p = (u.phone || '').replace(/\D/g, '').slice(-10);
+        return p === cleanPhone;
+      });
+      if (inCache) return true;
+    } catch (e) {
+      return false;
+    }
+
+    return false;
+  };
+
+  const getUserByPhone = async (phoneToFind: string): Promise<UserProfile | null> => {
+    const cleanPhone = phoneToFind.trim().replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length !== 10) return null;
+
+    try {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('phone', '==', cleanPhone));
+      const snapshot = await getDocs(q);
+      if (!snapshot.empty) {
+        const docData = snapshot.docs[0].data() as UserProfile;
+        return {
+          ...docData,
+          Id: docData.Id || snapshot.docs[0].id,
+          studentId: docData.studentId || snapshot.docs[0].id,
+          phone: cleanPhone
+        };
+      }
+    } catch (e) {
+      console.warn('Firestore phone lookup note:', e);
+    }
+
+    try {
+      const cachedUsers = JSON.parse(localStorage.getItem('registered_users_cache') || '[]');
+      const match = cachedUsers.find((u: any) => (u.phone || '').replace(/\D/g, '').slice(-10) === cleanPhone);
+      if (match) {
+        return {
+          Id: match.studentId || match.uid || `STU-${cleanPhone.slice(-4)}`,
+          studentId: match.studentId || match.uid || `STU-${cleanPhone.slice(-4)}`,
+          name: match.name || 'Student',
+          role: 'Student',
+          preference: match.preference || 'Veg',
+          email: match.email || `${cleanPhone}@institution.edu`,
+          phone: cleanPhone,
+          department: match.department || 'Computer Science',
+          hostelRoom: match.hostelRoom || 'BH-1 / 101'
+        };
+      }
+    } catch (e) {}
+
+    return null;
+  };
+
+  const sendPhoneOtp = async (phone: string, checkDuplicate: boolean = true): Promise<{ success: boolean; otp: string }> => {
+    clearAuthError();
+    const cleanPhone = phone.trim().replace(/\D/g, '').slice(-10);
     if (cleanPhone.length !== 10) {
       throw new Error("Phone number must be exactly 10 digits.");
     }
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    if (checkDuplicate) {
+      const exists = await checkPhoneExists(cleanPhone);
+      if (exists) {
+        throw new Error("This mobile number is already registered to another account. Duplicate phone numbers are not allowed.");
+      }
+    }
+
+    // Cryptographically secure 6-digit OTP generation (100000 - 999999)
+    const array = new Uint32Array(1);
+    crypto.getRandomValues(array);
+    const otp = (100000 + (array[0] % 900000)).toString();
     const expiresAt = Date.now() + 10 * 60 * 1000; // 10 minutes
 
     try {
-      sessionStorage.setItem(`phone_otp_${cleanPhone}`, JSON.stringify({ otp, expiresAt }));
+      sessionStorage.setItem(`phone_otp_${cleanPhone}`, JSON.stringify({ otp, expiresAt, attempts: 0 }));
     } catch (e) {}
 
-    console.log(`[Mobile SMS Gateway] Dispatched OTP code ${otp} to +91-${cleanPhone}`);
+    console.log(`[Mobile SMS Dispatch] Dispatched original 6-digit OTP code ${otp} to +91-${cleanPhone}`);
     return { success: true, otp };
   };
 
+  const sendLoginPhoneOtp = async (phone: string): Promise<{ success: boolean; otp: string }> => {
+    clearAuthError();
+    const cleanPhone = phone.trim().replace(/\D/g, '').slice(-10);
+    if (cleanPhone.length !== 10) {
+      throw new Error("Phone number must be exactly 10 digits.");
+    }
+    const exists = await checkPhoneExists(cleanPhone);
+    if (!exists) {
+      throw new Error("No registered account found with this phone number. Please sign up first.");
+    }
+    return sendPhoneOtp(phone, false);
+  };
+
   const verifyPhoneOtp = async (phone: string, enteredOtp: string): Promise<boolean> => {
-    const cleanPhone = phone.trim().replace(/\D/g, '');
-    let stored: { otp: string; expiresAt: number } | null = null;
+    clearAuthError();
+    const cleanPhone = phone.trim().replace(/\D/g, '').slice(-10);
+    let stored: { otp: string; expiresAt: number; attempts?: number } | null = null;
     try {
       const item = sessionStorage.getItem(`phone_otp_${cleanPhone}`);
       if (item) stored = JSON.parse(item);
@@ -459,17 +616,63 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       throw new Error("No active OTP request found for this phone number. Please click Send OTP.");
     }
     if (Date.now() > stored.expiresAt) {
-      throw new Error("Phone OTP has expired. Please request a new OTP code.");
+      sessionStorage.removeItem(`phone_otp_${cleanPhone}`);
+      throw new Error("Phone OTP has expired. Please click Resend OTP for a new verification code.");
     }
     if (stored.otp !== enteredOtp.trim()) {
+      const attempts = (stored.attempts || 0) + 1;
+      if (attempts >= 5) {
+        sessionStorage.removeItem(`phone_otp_${cleanPhone}`);
+        throw new Error("Too many incorrect attempts. Please request a new OTP code.");
+      }
+      sessionStorage.setItem(`phone_otp_${cleanPhone}`, JSON.stringify({ ...stored, attempts }));
       throw new Error("Invalid phone OTP. Please check the code sent to your number and try again.");
     }
 
     try {
       sessionStorage.removeItem(`phone_otp_${cleanPhone}`);
+      sessionStorage.setItem(`phone_verified_${cleanPhone}`, 'true');
     } catch (e) {}
 
     return true;
+  };
+
+  const signInWithPhoneOtp = async (phone: string, enteredOtp: string): Promise<void> => {
+    clearAuthError();
+    const cleanPhone = phone.trim().replace(/\D/g, '').slice(-10);
+    await verifyPhoneOtp(cleanPhone, enteredOtp);
+
+    const userProfile = await getUserByPhone(cleanPhone);
+    if (!userProfile) {
+      throw new Error("Unable to locate registered Mess Manager or College Principal account for this phone number.");
+    }
+
+    if (userProfile.role === 'Student' || isStudentIdentifier(userProfile.email)) {
+      throw new Error("Access Denied: Only Mess Managers and the College Principal are authorized to access this portal. Students are not allowed to log in.");
+    }
+
+    const isPrincipal = userProfile.role === 'College Principal' || userProfile.email.toLowerCase().includes('principal');
+    const restoredProfile: UserProfile = {
+      ...userProfile,
+      role: isPrincipal ? 'College Principal' : 'Mess Manager',
+      department: isPrincipal ? 'College Administration' : 'Central Mess Management',
+      hostelRoom: isPrincipal ? 'Principal Executive Office' : 'Mess Manager Office',
+      lastLogin: new Date().toISOString()
+    };
+
+    sessionStorage.setItem('mess_session_user', JSON.stringify(restoredProfile));
+    recordLoginLog(restoredProfile, 'Mobile Phone OTP');
+
+    if (getSalesforceToken()) {
+      salesforceSyncService.syncUserLogin(restoredProfile).then((sfId) => {
+        if (sfId) {
+          restoredProfile.sfUserId = sfId;
+          sessionStorage.setItem('mess_session_user', JSON.stringify(restoredProfile));
+        }
+      }).catch(() => {});
+    }
+
+    setDbUser(restoredProfile);
   };
 
   const sendPasswordResetOtp = async (email: string): Promise<{ success: boolean; otp: string; message: string }> => {
@@ -561,6 +764,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     clearAuthError();
     const cleanEmail = email.trim().toLowerCase();
 
+    // STRICT CHECK: Reject students immediately
+    if (isStudentIdentifier(cleanEmail)) {
+      const errMsg = "Access Denied: Only Mess Managers and the College Principal are authorized to access this portal with their email. Students cannot log in here.";
+      setAuthError(errMsg);
+      throw new Error(errMsg);
+    }
+
     // Check if user has an OTP-reset custom password
     let customResetPassword = '';
     try {
@@ -571,15 +781,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const cred = await signInWithEmailAndPassword(auth, cleanEmail, pass);
       const u = cred.user;
-      const isAdmin = u.email?.toLowerCase().includes('admin') || u.email?.toLowerCase().includes('warden');
+      const isPrincipal = cleanEmail.includes('principal');
+      const assignedRole: UserProfile['role'] = isPrincipal ? 'College Principal' : 'Mess Manager';
+      const assignedDept = isPrincipal ? 'College Administration' : 'Central Mess Management';
+      const assignedRoom = isPrincipal ? 'Principal Executive Office' : 'Mess Manager Office - Ground Floor';
+
       const profile = await syncUserProfileToBackend({
         uid: u.uid,
         email: u.email,
         displayName: u.displayName
       }, {
-        role: isAdmin ? 'Admin' : 'Student',
-        department: isAdmin ? 'Central Mess Administration' : 'Hostel Resident',
-        hostelRoom: isAdmin ? 'Admin Office' : 'Room 201'
+        role: assignedRole,
+        department: assignedDept,
+        hostelRoom: assignedRoom
       });
 
       if (profile) {
@@ -591,19 +805,38 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
       // If user reset their password via OTP and password matches:
       if (customResetPassword && customResetPassword === pass) {
+        const isPrincipal = cleanEmail.includes('principal');
+        const assignedRole: UserProfile['role'] = isPrincipal ? 'College Principal' : 'Mess Manager';
+        const assignedDept = isPrincipal ? 'College Administration' : 'Central Mess Management';
+        const assignedRoom = isPrincipal ? 'Principal Executive Office' : 'Mess Manager Office - Ground Floor';
+
         try {
           const usersRef = collection(db, 'users');
           const q = query(usersRef, where('email', '==', cleanEmail));
           const snap = await getDocs(q);
           if (!snap.empty) {
             const data = snap.docs[0].data() as UserProfile;
+            if (data.role === 'Student') {
+              const errMsg = "Access Denied: Student accounts are not permitted to log in. Only Mess Managers and College Principals have access.";
+              setAuthError(errMsg);
+              throw new Error(errMsg);
+            }
             const restoredProfile: UserProfile = {
               ...data,
               Id: data.Id || snap.docs[0].id,
               studentId: data.studentId || snap.docs[0].id,
+              role: assignedRole,
               email: cleanEmail,
               lastLogin: new Date().toISOString()
             };
+            if (getSalesforceToken()) {
+              salesforceSyncService.syncUserLogin(restoredProfile).then((sfId) => {
+                if (sfId) {
+                  restoredProfile.sfUserId = sfId;
+                  sessionStorage.setItem('mess_session_user', JSON.stringify(restoredProfile));
+                }
+              }).catch(() => {});
+            }
             sessionStorage.setItem('mess_session_user', JSON.stringify(restoredProfile));
             setDbUser(restoredProfile);
             return;
@@ -616,19 +849,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           Id: 'usr-' + Date.now(),
           studentId: 'usr-' + Date.now(),
           name: cleanEmail.split('@')[0],
-          role: 'Student',
+          role: assignedRole,
           preference: 'Veg',
           email: cleanEmail,
-          department: 'Hostel Resident',
-          hostelRoom: 'BH-1 / 101'
+          department: assignedDept,
+          hostelRoom: assignedRoom
         };
+        if (getSalesforceToken()) {
+          salesforceSyncService.syncUserLogin(fallback).then((sfId) => {
+            if (sfId) {
+              fallback.sfUserId = sfId;
+              sessionStorage.setItem('mess_session_user', JSON.stringify(fallback));
+            }
+          }).catch(() => {});
+        }
         sessionStorage.setItem('mess_session_user', JSON.stringify(fallback));
         setDbUser(fallback);
         return;
       }
 
-      if (err?.code === 'auth/user-not-found' || err?.code === 'auth/invalid-credential') {
-        setAuthError("Invalid email or password. Please check your credentials or use Forgot Password.");
+      if (err?.message && err.message.includes('Access Denied')) {
+        setAuthError(err.message);
+      } else if (err?.code === 'auth/user-not-found' || err?.code === 'auth/invalid-credential') {
+        setAuthError("Invalid credentials. Please verify your Mess Manager or College Principal email and password.");
       } else if (err?.code === 'auth/wrong-password') {
         setAuthError("Incorrect password. Please try again or use Forgot Password to reset.");
       } else {
@@ -638,37 +881,71 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const signUpWithEmail = async (email: string, pass: string, name: string, phone?: string) => {
+  const signUpWithEmail = async (
+    email: string, 
+    pass: string, 
+    name: string, 
+    phone?: string, 
+    role: 'Mess Manager' | 'College Principal' = 'Mess Manager'
+  ) => {
     clearAuthError();
     const cleanEmail = email.trim().toLowerCase();
+    const cleanPhone = phone ? phone.trim().replace(/\D/g, '').slice(-10) : '';
+
+    // STRICT CHECK: Reject students immediately
+    if (isStudentIdentifier(cleanEmail)) {
+      const errMsg = "Registration Restricted: Students cannot register on this portal. Only Mess Managers and College Principals can create an account.";
+      setAuthError(errMsg);
+      throw new Error(errMsg);
+    }
 
     // 1. Strict Duplicate Email Prevention
     const alreadyExists = await checkEmailExists(cleanEmail);
     if (alreadyExists) {
-      const errMsg = "This email address is already registered. Duplicate emails are not allowed. Please sign in or use Forgot Password.";
+      const errMsg = "This institutional email address is already registered. Duplicate emails are not allowed. Please sign in.";
       setAuthError(errMsg);
       throw new Error(errMsg);
+    }
+
+    // 2. Strict Duplicate Phone Prevention
+    if (cleanPhone) {
+      const phoneExists = await checkPhoneExists(cleanPhone);
+      if (phoneExists) {
+        const errMsg = "This mobile number is already registered. Duplicate phone numbers are not allowed. Please sign in or use an original number.";
+        setAuthError(errMsg);
+        throw new Error(errMsg);
+      }
     }
 
     try {
       const cred = await createUserWithEmailAndPassword(auth, cleanEmail, pass);
       const u = cred.user;
+      const assignedRole = role || (cleanEmail.includes('principal') ? 'College Principal' : 'Mess Manager');
+      const assignedDept = assignedRole === 'College Principal' ? 'College Administration' : 'Central Mess Management';
+      const assignedRoom = assignedRole === 'College Principal' ? 'Principal Executive Office' : 'Mess Manager Office - Ground Floor';
+
       const profile = await syncUserProfileToBackend({
         uid: u.uid,
         email: u.email,
         displayName: name.trim() || u.displayName
       }, {
-        name: name.trim() || u.email?.split('@')[0] || 'Student',
-        role: 'Student',
-        department: 'Computer Science',
-        hostelRoom: 'BH-1 / 101',
-        phone: phone ? phone.trim().replace(/\D/g, '') : ''
+        name: name.trim() || (assignedRole === 'College Principal' ? 'College Principal' : 'Mess Manager'),
+        role: assignedRole,
+        department: assignedDept,
+        hostelRoom: assignedRoom,
+        phone: cleanPhone
       });
 
       // Cache locally to prevent duplicates
       try {
         const cached = JSON.parse(localStorage.getItem('registered_users_cache') || '[]');
-        cached.push({ email: cleanEmail, name: name.trim(), phone: phone || '' });
+        cached.push({ 
+          email: cleanEmail, 
+          name: name.trim(), 
+          phone: cleanPhone,
+          role: assignedRole,
+          uid: u.uid
+        });
         localStorage.setItem('registered_users_cache', JSON.stringify(cached));
       } catch (e) {}
 
@@ -687,78 +964,52 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const loginWithStudentId = async (identifier: string) => {
+  const loginWithStudentId = async (_identifier: string) => {
     clearAuthError();
-    const cleanId = identifier.trim().toUpperCase();
-    if (!cleanId) {
-      setAuthError("Please enter your Student ID or Roll Number.");
-      return;
-    }
-
-    try {
-      // Check Salesforce Student__c first if online
-      if (getSalesforceToken()) {
-        const soql = `SELECT Id, Name, Student_ID__c, Department__c, Hostel_Room__c, Diet_Preference__c, Email__c FROM Student__c WHERE Student_ID__c = '${cleanId}' OR Name LIKE '%${cleanId}%' OR Email__c = '${cleanId.toLowerCase()}' LIMIT 1`;
-        const res = await sfApi.query(soql);
-        if (res && res.records && res.records.length > 0) {
-          const s = res.records[0];
-          const studentUser: UserProfile = {
-            Id: s.Id,
-            studentId: s.Id,
-            name: s.Name,
-            role: 'Student',
-            preference: s.Diet_Preference__c || 'Veg',
-            email: s.Email__c,
-            department: s.Department__c,
-            hostelRoom: s.Hostel_Room__c
-          };
-          sessionStorage.setItem('mess_session_user', JSON.stringify(studentUser));
-          setDbUser(studentUser);
-          return;
-        }
-      }
-    } catch (e) {
-      console.warn('Salesforce student search failed, using student profile:', e);
-    }
-
-    // Direct student session
-    const studentUser: UserProfile = {
-      Id: 'STU-' + cleanId,
-      studentId: cleanId,
-      name: `Student (${cleanId})`,
-      role: 'Student',
-      preference: 'Veg',
-      email: `${cleanId.toLowerCase()}@institution.edu`,
-      department: 'Engineering',
-      hostelRoom: 'Hostel Block'
-    };
-    sessionStorage.setItem('mess_session_user', JSON.stringify(studentUser));
-    setDbUser(studentUser);
+    const errMsg = "Student login is disabled. This portal is strictly for Mess Managers and the College Principal only.";
+    setAuthError(errMsg);
   };
 
-  const loginAsDemoUser = (role: 'Admin' | 'Student' = 'Admin') => {
+  const loginAsDemoUser = (role: 'Mess Manager' | 'College Principal' | 'Admin' = 'Mess Manager') => {
     clearAuthError();
-    const demoUser: UserProfile = role === 'Admin' ? {
-      Id: 'demo-admin-01',
-      studentId: 'demo-admin-01',
-      name: 'Dr. Ramesh Kumar (Warden)',
-      role: 'Admin',
+    const isPrincipal = role === 'College Principal';
+    const demoUser: UserProfile = isPrincipal ? {
+      Id: 'principal-demo-01',
+      studentId: 'principal-demo-01',
+      name: 'Dr. K. Rajagopalan (College Principal)',
+      role: 'College Principal',
       preference: 'Veg',
-      email: 'warden@mess.institution.edu',
-      department: 'Central Mess Administration',
-      hostelRoom: 'Warden Office - Block A'
+      email: 'principal@institution.edu',
+      phone: '9845011223',
+      department: 'Executive College Administration',
+      hostelRoom: 'Principal Executive Secretariat',
+      lastLogin: new Date().toISOString()
     } : {
-      Id: '21CS1004',
-      studentId: '21CS1004',
-      name: 'Rahul Sharma',
-      role: 'Student',
-      preference: 'Non-Veg',
-      email: 'rahul.sharma@institution.edu',
-      department: 'Computer Science',
-      hostelRoom: 'BH-3 / 214'
+      Id: 'manager-demo-01',
+      studentId: 'manager-demo-01',
+      name: 'Dr. S. Sundar (Mess Manager)',
+      role: 'Mess Manager',
+      preference: 'Veg',
+      email: 'manager@institution.edu',
+      phone: '9876543210',
+      department: 'Central Mess Management',
+      hostelRoom: 'Mess Operations Hub',
+      lastLogin: new Date().toISOString()
     };
 
     sessionStorage.setItem('mess_session_user', JSON.stringify(demoUser));
+    recordLoginLog(demoUser, `Demo Quick Login (${demoUser.role})`);
+
+    // Store in Salesforce Mess_User__c backend immediately
+    if (getSalesforceToken()) {
+      salesforceSyncService.syncUserLogin(demoUser).then((sfId) => {
+        if (sfId) {
+          demoUser.sfUserId = sfId;
+          sessionStorage.setItem('mess_session_user', JSON.stringify(demoUser));
+        }
+      }).catch(() => {});
+    }
+
     setDbUser(demoUser);
   };
 
@@ -796,8 +1047,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     signOut,
     verifyOtp,
     checkEmailExists,
+    checkPhoneExists,
     sendPhoneOtp,
+    sendLoginPhoneOtp,
     verifyPhoneOtp,
+    signInWithPhoneOtp,
     sendPasswordResetOtp,
     resetPasswordWithOtp
   };
