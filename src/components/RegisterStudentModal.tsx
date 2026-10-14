@@ -125,6 +125,11 @@ export const RegisterStudentModal: React.FC<RegisterStudentModalProps> = ({
       };
 
       await onRegisterStudent(newStudent);
+      setName('');
+      setId('');
+      setPhone('');
+      setEmail('');
+      setErrors({});
       onClose();
     } catch (err: any) {
       alert(err.message || 'Failed to register student record.');

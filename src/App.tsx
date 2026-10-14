@@ -502,48 +502,78 @@ export default function App() {
   };
 
   /**
-   * Register new resident student
+   * Register new resident student (Optimistic Instant Response)
    */
   const handleRegisterStudent = async (newStudent: Student) => {
     try {
-      let createdId = newStudent.id;
-      let sfId: string | null = null;
+      const cleanId = newStudent.id.trim().toUpperCase();
+      const studentRecord: Student = {
+        ...newStudent,
+        id: cleanId,
+        academicYear: newStudent.academicYear || '1st Year',
+        status: 'Active Plan'
+      };
 
-      // Automatically store Student__c in Salesforce backend with all fields correctly assigned
-      if (getSalesforceToken()) {
-        try {
-          sfId = await salesforceSyncService.ensureSalesforceStudent(newStudent);
-          if (sfId) createdId = sfId;
-        } catch (sfErr) {
-          console.warn('[Salesforce Sync] Register student note:', sfErr);
-        }
-      }
-
-      // Save to Firebase Firestore
-      try {
-        await setDoc(doc(db, 'users', createdId), {
-          ...newStudent,
-          Id: createdId,
-          studentId: newStudent.id,
-          academicYear: newStudent.academicYear || '1st Year',
-          sfId: sfId || null,
-          role: 'Student',
-          createdAt: serverTimestamp()
-        }, { merge: true });
-      } catch {}
-
-      // Cache locally for offline/instant access
+      // 1. Immediately cache locally for instant offline and fast access
       try {
         const cached = JSON.parse(localStorage.getItem('registered_users_cache') || '[]');
-        const updated = [newStudent, ...cached.filter((c: any) => c.id !== newStudent.id)];
+        const updated = [studentRecord, ...cached.filter((c: any) => c.id !== cleanId)];
         localStorage.setItem('registered_users_cache', JSON.stringify(updated));
       } catch {}
 
-      const registeredStudent: Student = { ...newStudent, id: createdId, sfId: sfId || undefined };
-      setStudents((prev) => [registeredStudent, ...prev.filter((s) => s.id !== createdId)]);
-      setSelectedStudentId(registeredStudent.id);
+      // 2. Immediately update UI state & switch to search tab with newly registered student selected
+      setStudents((prev) => [studentRecord, ...prev.filter((s) => s.id !== cleanId)]);
+      setSelectedStudentId(studentRecord.id);
       setCurrentTab('search');
       playSoundChime('success');
+
+      // 3. Perform backend synchronization (Salesforce & Firestore) asynchronously in background
+      (async () => {
+        let sfId: string | null = null;
+        if (getSalesforceToken()) {
+          try {
+            sfId = await salesforceSyncService.ensureSalesforceStudent(studentRecord);
+            if (sfId) {
+              setStudents((prev) =>
+                prev.map((s) => (s.id === cleanId ? { ...s, sfId: sfId! } : s))
+              );
+              try {
+                const cached = JSON.parse(localStorage.getItem('registered_users_cache') || '[]');
+                const patched = cached.map((c: any) => (c.id === cleanId ? { ...c, sfId } : c));
+                localStorage.setItem('registered_users_cache', JSON.stringify(patched));
+              } catch {}
+            }
+          } catch (sfErr) {
+            console.warn('[Salesforce Sync] Register student background note:', sfErr);
+          }
+        }
+
+        // Sync to Firebase Firestore with a 4s race timeout
+        try {
+          const docId = sfId || cleanId;
+          const firestorePromise = setDoc(
+            doc(db, 'users', docId),
+            {
+              ...studentRecord,
+              Id: docId,
+              studentId: cleanId,
+              academicYear: studentRecord.academicYear || '1st Year',
+              sfId: sfId || null,
+              role: 'Student',
+              createdAt: serverTimestamp()
+            },
+            { merge: true }
+          );
+          const timeoutPromise = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error('Firestore sync timeout')), 4000)
+          );
+          await Promise.race([firestorePromise, timeoutPromise]);
+        } catch (fErr) {
+          console.warn('[Firestore Sync] Register student background note:', fErr);
+        }
+      })().catch((err) => {
+        console.warn('[Backend Sync] Student async sync error:', err);
+      });
     } catch (err: any) {
       alert(err.message || 'Failed to register student');
     }

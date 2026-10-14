@@ -154,21 +154,23 @@ export async function issueMealToken(params: {
     source
   };
 
-  // 3. Save to Firebase Firestore (`tokens` collection)
-  try {
-    const tokenDocRef = doc(db, 'tokens', tokenId);
-    await setDoc(tokenDocRef, {
-      ...tokenRecord,
-      createdAt: serverTimestamp()
-    });
-    console.log('Token successfully stored in Firestore backend:', tokenId);
-  } catch (err) {
-    console.warn('Firestore token write notice (persisting locally):', err);
-  }
-
-  // 4. Update local cache
+  // 3. Update local cache immediately for instant UI feedback (< 2ms)
   const cached = getLocalCachedTokens();
   saveLocalCachedTokens([tokenRecord, ...cached.filter((t) => t.id !== tokenId)]);
+
+  // 4. Save to Firebase Firestore asynchronously in background with timeout safety
+  (async () => {
+    try {
+      const tokenDocRef = doc(db, 'tokens', tokenId);
+      await setDoc(tokenDocRef, {
+        ...tokenRecord,
+        createdAt: serverTimestamp()
+      });
+      console.log('Token successfully stored in Firestore backend:', tokenId);
+    } catch (err) {
+      console.warn('Firestore token write notice (persisted locally):', err);
+    }
+  })();
 
   // 5. Background sync with Salesforce (links manager sfUserId and updates issuer stats)
   salesforceSyncService.syncMealToken(tokenRecord, student, issuedByUserId).catch((err) => {

@@ -18,13 +18,16 @@ const sfRequest = async (endpoint: string, options: RequestInit = {}) => {
     ...options.headers
   };
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 6000);
+
   try {
-    const response = await fetch(url, { ...options, headers });
+    const response = await fetch(url, { ...options, headers, signal: controller.signal });
+    clearTimeout(timeoutId);
 
     if (response.status === 401) {
       logoutSalesforce();
-      window.location.href = '/';
-      throw new Error('Your Salesforce session has expired. Please reconnect.');
+      throw new Error('Your Salesforce session has expired or is invalid.');
     }
 
     if (!response.ok) {
@@ -44,6 +47,10 @@ const sfRequest = async (endpoint: string, options: RequestInit = {}) => {
 
     return await response.json();
   } catch (error: any) {
+    clearTimeout(timeoutId);
+    if (error.name === 'AbortError') {
+      throw new Error('Salesforce request timed out (6s limit reached).');
+    }
     throw new Error(error.message || 'Unable to connect to Salesforce. Please try again.');
   }
 };
