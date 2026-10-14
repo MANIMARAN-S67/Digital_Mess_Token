@@ -150,6 +150,7 @@ export default function App() {
         {
           id: '21CS1004',
           name: 'Rahul Sharma',
+          academicYear: '4th Year',
           department: 'Computer Science',
           hostelRoom: 'BH-3 / 214',
           preference: 'Non-Veg',
@@ -162,6 +163,7 @@ export default function App() {
         {
           id: '22EC1012',
           name: 'Aditi Rao',
+          academicYear: '3rd Year',
           department: 'Electronics & Comm.',
           hostelRoom: 'LH-1 / 105',
           preference: 'Veg',
@@ -174,6 +176,7 @@ export default function App() {
         {
           id: '23ME1055',
           name: 'Karthik Sundaram',
+          academicYear: '2nd Year',
           department: 'Mechanical Engg.',
           hostelRoom: 'BH-1 / 302',
           preference: 'Veg',
@@ -192,6 +195,7 @@ export default function App() {
           baseStudents.unshift({
             id: userStudentId,
             name: dbUser.name || 'Current Student',
+            academicYear: (dbUser as any).academicYear || '1st Year',
             department: dbUser.department || 'Computer Science',
             hostelRoom: dbUser.hostelRoom || 'BH-1 / 101',
             preference: dbUser.preference || 'Veg',
@@ -218,6 +222,7 @@ export default function App() {
               baseStudents.push({
                 id: sid,
                 name: data.name || data.displayName || 'Resident',
+                academicYear: data.academicYear || '1st Year',
                 department: data.department || 'Hostel Resident',
                 hostelRoom: data.hostelRoom || 'BH-1 / 101',
                 preference: data.preference || 'Veg',
