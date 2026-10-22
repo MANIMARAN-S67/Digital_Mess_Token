@@ -4,19 +4,21 @@ import { useAuth } from '../context/AuthContext';
 interface AdminProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  selectedMessHall: string;
-  onSelectMessHall: (hall: string) => void;
+  selectedMessHall?: string;
+  onSelectMessHall?: (hall: string) => void;
   soundEnabled: boolean;
   onToggleSound: () => void;
+  onResetAllSessions?: () => void;
 }
 
 export const AdminProfileModal: React.FC<AdminProfileModalProps> = ({
   isOpen,
   onClose,
-  selectedMessHall,
+  selectedMessHall = 'Central Mess Hall A',
   onSelectMessHall,
   soundEnabled,
-  onToggleSound
+  onToggleSound,
+  onResetAllSessions
 }) => {
   const { dbUser, signOut } = useAuth();
 
@@ -111,7 +113,7 @@ export const AdminProfileModal: React.FC<AdminProfileModalProps> = ({
             </label>
             <select
               value={selectedMessHall}
-              onChange={(e) => onSelectMessHall(e.target.value)}
+              onChange={(e) => onSelectMessHall?.(e.target.value)}
               className="w-full h-10 px-3 border border-[#74777f] rounded-lg text-[13px] text-[#0d1c2e] bg-white focus:border-[#002045] outline-none"
             >
               {halls.map((h) => (

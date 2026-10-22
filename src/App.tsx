@@ -290,7 +290,8 @@ export default function App() {
                   date: rec.Token_Date__c || today,
                   time: rec.Token_Time__c || '12:00:00 PM',
                   status: (rec.Status__c || 'Issued') as any,
-                  issuedByName: 'Mess Counter Staff'
+                  issuedByName: 'Mess Counter Staff',
+                  source: 'Counter'
                 });
               }
             });

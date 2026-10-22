@@ -67,7 +67,7 @@ export const BackendInspectorModal: React.FC<BackendInspectorModalProps> = ({ is
       try {
         const lSnap = await getDocs(query(collection(db, 'login_logs'), limit(50)));
         if (!lSnap.empty) {
-          const logs = lSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          const logs: any[] = lSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
           setLoginLogs(logs.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || '')));
         } else {
           const cachedLogs = JSON.parse(localStorage.getItem('mess_login_logs_cache') || '[]');

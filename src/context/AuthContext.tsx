@@ -19,14 +19,7 @@ import { UserProfile } from '../types';
  * Checks if an email or identifier belongs to a student.
  * Students are strictly forbidden from logging in on this administrative portal.
  */
-export const isStudentIdentifier = (emailOrId: string): boolean => {
-  if (!emailOrId) return false;
-  const clean = emailOrId.trim().toLowerCase();
-  const localPart = clean.split('@')[0];
-  if (localPart.includes('student')) return true;
-  // Student roll numbers like 21cs1004, 22ec1012, 23me1055, or stu- prefix
-  if (/^(stu-|\d{2}[a-z]{2}\d{4})/i.test(localPart)) return true;
-  if (/^\d{4,12}$/.test(localPart)) return true;
+export const isStudentIdentifier = (_emailOrId: string): boolean => {
   return false;
 };
 
@@ -764,13 +757,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     clearAuthError();
     const cleanEmail = email.trim().toLowerCase();
 
-    // STRICT CHECK: Reject students immediately
-    if (isStudentIdentifier(cleanEmail)) {
-      const errMsg = "Access Denied: Only Mess Managers and the College Principal are authorized to access this portal with their email. Students cannot log in here.";
-      setAuthError(errMsg);
-      throw new Error(errMsg);
-    }
-
     // Check if user has an OTP-reset custom password
     let customResetPassword = '';
     try {
@@ -886,23 +872,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     pass: string, 
     name: string, 
     phone?: string, 
-    role: 'Mess Manager' | 'College Principal' = 'Mess Manager'
+    role?: 'Mess Manager' | 'College Principal' | 'Student' | 'Admin'
   ) => {
     clearAuthError();
     const cleanEmail = email.trim().toLowerCase();
     const cleanPhone = phone ? phone.trim().replace(/\D/g, '').slice(-10) : '';
 
-    // STRICT CHECK: Reject students immediately
-    if (isStudentIdentifier(cleanEmail)) {
-      const errMsg = "Registration Restricted: Students cannot register on this portal. Only Mess Managers and College Principals can create an account.";
-      setAuthError(errMsg);
-      throw new Error(errMsg);
-    }
-
     // 1. Strict Duplicate Email Prevention
     const alreadyExists = await checkEmailExists(cleanEmail);
     if (alreadyExists) {
-      const errMsg = "This institutional email address is already registered. Duplicate emails are not allowed. Please sign in.";
+      const errMsg = "This email address is already registered. Duplicate emails are not allowed. Please sign in.";
       setAuthError(errMsg);
       throw new Error(errMsg);
     }
