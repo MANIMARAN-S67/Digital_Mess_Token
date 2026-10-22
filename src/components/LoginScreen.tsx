@@ -106,17 +106,45 @@ export const LoginScreen: React.FC = () => {
   const signupPassStrength = checkPasswordStrength(signupPassword);
   const newPassStrength = checkPasswordStrength(newPassword);
 
-  // Real-time duplicate email validation for signup
+  // Debounced real-time duplicate email validation
+  useEffect(() => {
+    const trimmed = signupEmail.trim().toLowerCase();
+    if (!trimmed || !trimmed.includes('@') || !trimmed.includes('.')) {
+      setEmailDuplicateError('');
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsCheckingEmail(true);
+      try {
+        const exists = await checkEmailExists(trimmed);
+        if (exists) {
+          setEmailDuplicateError('This email is already registered. Duplicate emails are not allowed. Please sign in.');
+        } else {
+          setEmailDuplicateError('');
+        }
+      } catch {
+        // silent
+      } finally {
+        setIsCheckingEmail(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [signupEmail, checkEmailExists]);
+
+  // Real-time duplicate email validation on blur for signup
   const handleEmailBlur = async () => {
-    if (!signupEmail.trim() || !signupEmail.includes('@')) {
+    const trimmed = signupEmail.trim().toLowerCase();
+    if (!trimmed || !trimmed.includes('@')) {
       setEmailDuplicateError('');
       return;
     }
     setIsCheckingEmail(true);
     try {
-      const exists = await checkEmailExists(signupEmail.trim());
+      const exists = await checkEmailExists(trimmed);
       if (exists) {
-        setEmailDuplicateError('This email is already registered. Duplicate emails are not allowed.');
+        setEmailDuplicateError('This email is already registered. Duplicate emails are not allowed. Please sign in.');
       } else {
         setEmailDuplicateError('');
       }
@@ -137,7 +165,7 @@ export const LoginScreen: React.FC = () => {
     try {
       const exists = await checkPhoneExists(cleanedPhone);
       if (exists) {
-        setPhoneDuplicateError('This mobile number is already registered. Duplicate phone numbers are not allowed.');
+        setPhoneDuplicateError('This phone number is already registered. Duplicate phone numbers are not allowed.');
         return false;
       } else {
         setPhoneDuplicateError('');
@@ -267,29 +295,47 @@ export const LoginScreen: React.FC = () => {
       return;
     }
 
-    // 3. Ensure phone is not duplicate
+    // 3. Strict Pre-flight Email Duplicate Check
+    setIsCheckingEmail(true);
+    const emailAlreadyTaken = await checkEmailExists(signupEmail.trim());
+    setIsCheckingEmail(false);
+    if (emailAlreadyTaken) {
+      setEmailDuplicateError('This email is already registered. Duplicate emails are not allowed. Please sign in.');
+      return;
+    }
+
+    // 4. Strict Pre-flight Phone Duplicate Check
+    setIsCheckingPhone(true);
+    const phoneAlreadyTaken = await checkPhoneExists(phone.trim());
+    setIsCheckingPhone(false);
+    if (phoneAlreadyTaken) {
+      setPhoneDuplicateError('This phone number is already registered. Duplicate phone numbers are not allowed.');
+      return;
+    }
+
+    // 5. Ensure phone is not duplicate
     if (phoneDuplicateError) {
       return;
     }
 
-    // 4. Ensure phone OTP is verified
+    // 6. Ensure phone OTP is verified
     if (!isPhoneVerified) {
       setPhoneOtpError('Please verify your phone number with the OTP code before registering.');
       return;
     }
 
-    // 5. Validate duplicate email
+    // 7. Validate duplicate email
     if (emailDuplicateError) {
       return;
     }
 
-    // 6. Validate strong password
+    // 8. Validate strong password
     if (!signupPassStrength.isStrong) {
       alert('Password is not strong enough. Please satisfy all password security requirements.');
       return;
     }
 
-    // 7. Check passwords match
+    // 9. Check passwords match
     if (signupPassword !== confirmPassword) {
       alert('Passwords do not match. Please re-enter.');
       return;
@@ -298,8 +344,20 @@ export const LoginScreen: React.FC = () => {
     setSubmitting(true);
     try {
       await signUpWithEmail(signupEmail.trim(), signupPassword, fullName.trim(), phone);
-    } catch {
-      // Error handled in AuthContext
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (
+        msg.toLowerCase().includes('email') &&
+        (msg.toLowerCase().includes('already') || msg.toLowerCase().includes('duplicate') || msg.toLowerCase().includes('in-use'))
+      ) {
+        setEmailDuplicateError('This email is already registered. Duplicate emails are not allowed. Please sign in.');
+      }
+      if (
+        (msg.toLowerCase().includes('phone') || msg.toLowerCase().includes('mobile')) &&
+        (msg.toLowerCase().includes('already') || msg.toLowerCase().includes('duplicate'))
+      ) {
+        setPhoneDuplicateError('This phone number is already registered. Duplicate phone numbers are not allowed.');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -674,30 +732,53 @@ export const LoginScreen: React.FC = () => {
                   Email Address <span className="text-red-500">*</span>
                 </label>
                 {isCheckingEmail && (
-                  <span className="text-[10px] text-gray-400 animate-pulse">Checking availability...</span>
+                  <span className="text-[10px] text-sky-600 font-bold animate-pulse flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-500 animate-ping"></span>
+                    Checking availability...
+                  </span>
                 )}
               </div>
-              <input
-                type="email"
-                required
-                placeholder="name@institution.edu"
-                value={signupEmail}
-                onChange={(e) => {
-                  setSignupEmail(e.target.value);
-                  setEmailDuplicateError('');
-                }}
-                onBlur={handleEmailBlur}
-                className={`w-full h-10 px-3.5 border rounded-xl text-sm text-gray-900 outline-none transition-all ${
-                  emailDuplicateError 
-                    ? 'border-red-400 bg-red-50/50 focus:border-red-500' 
-                    : 'border-gray-300 focus:border-[#1b4d5e] focus:ring-1 focus:ring-[#1b4d5e]'
-                }`}
-              />
+              <div className="relative flex items-center">
+                <input
+                  type="email"
+                  required
+                  placeholder="name@institution.edu"
+                  value={signupEmail}
+                  onChange={(e) => {
+                    setSignupEmail(e.target.value);
+                    if (emailDuplicateError) setEmailDuplicateError('');
+                  }}
+                  onBlur={handleEmailBlur}
+                  className={`w-full h-10 px-3.5 pr-10 border rounded-xl text-sm text-gray-900 outline-none transition-all ${
+                    emailDuplicateError 
+                      ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100 focus:border-red-600' 
+                      : 'border-gray-300 focus:border-[#1b4d5e] focus:ring-1 focus:ring-[#1b4d5e]'
+                  }`}
+                />
+                <span className={`material-symbols-outlined text-[18px] absolute right-3 pointer-events-none ${
+                  emailDuplicateError ? 'text-red-500' : 'text-gray-400'
+                }`}>
+                  {emailDuplicateError ? 'cancel' : 'mail'}
+                </span>
+              </div>
               {emailDuplicateError && (
-                <p className="text-[11px] font-bold text-red-600 mt-1 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[14px]">error</span>
-                  {emailDuplicateError}
-                </p>
+                <div className="mt-1.5 p-2.5 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2 animate-fadeIn shadow-xs">
+                  <span className="material-symbols-outlined text-[16px] text-red-600 shrink-0 mt-0.5">error</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-red-600 leading-tight">{emailDuplicateError}</p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setLoginEmail(signupEmail);
+                        setMode('signin');
+                        clearAuthError();
+                      }}
+                      className="text-[11px] text-[#1b4d5e] hover:underline font-extrabold mt-1 block"
+                    >
+                      Already registered? Click here to Sign In →
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
 
@@ -707,8 +788,14 @@ export const LoginScreen: React.FC = () => {
                 <label className="block text-[11px] font-bold text-gray-600 uppercase">
                   Phone Number (10 Digits) <span className="text-red-500">*</span>
                 </label>
-                <span className={`text-[10px] font-bold ${phone.length === 10 ? 'text-emerald-600' : 'text-gray-400'}`}>
-                  {isCheckingPhone ? 'Validating phone...' : `${phone.length}/10 digits`}
+                <span className={`text-[10px] font-bold ${
+                  phoneDuplicateError 
+                    ? 'text-red-600' 
+                    : phone.length === 10 
+                    ? 'text-emerald-600' 
+                    : 'text-gray-400'
+                }`}>
+                  {isCheckingPhone ? 'Checking availability...' : `${phone.length}/10 digits`}
                 </span>
               </div>
 
@@ -725,7 +812,7 @@ export const LoginScreen: React.FC = () => {
                   disabled={isPhoneVerified}
                   className={`flex-1 h-10 px-3 border rounded-xl text-sm font-mono text-gray-900 outline-none transition-all ${
                     phoneDuplicateError
-                      ? 'border-red-400 bg-red-50/50'
+                      ? 'border-red-500 bg-red-50/50 ring-2 ring-red-100'
                       : isPhoneVerified 
                       ? 'border-emerald-500 bg-emerald-50/40' 
                       : 'border-gray-300 focus:border-[#1b4d5e]'
@@ -769,10 +856,15 @@ export const LoginScreen: React.FC = () => {
 
               {/* Duplicate Phone Error Banner */}
               {phoneDuplicateError && (
-                <p className="text-[11px] font-bold text-red-600 mt-1 flex items-center gap-1 animate-fadeIn">
-                  <span className="material-symbols-outlined text-[14px]">error</span>
-                  <span>{phoneDuplicateError}</span>
-                </p>
+                <div className="mt-1.5 p-2.5 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2 animate-fadeIn shadow-xs">
+                  <span className="material-symbols-outlined text-[16px] text-red-600 shrink-0 mt-0.5">error</span>
+                  <div className="flex-1">
+                    <p className="text-xs font-bold text-red-600 leading-tight">{phoneDuplicateError}</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      No duplicate phone numbers are allowed. Please enter an unregistered mobile number.
+                    </p>
+                  </div>
+                </div>
               )}
 
               {/* OTP Input Field when OTP is dispatched */}
@@ -958,10 +1050,12 @@ export const LoginScreen: React.FC = () => {
                 !signupEmail.trim() || 
                 !phone.trim() || 
                 Boolean(phoneDuplicateError) ||
+                Boolean(emailDuplicateError) ||
+                isCheckingEmail ||
+                isCheckingPhone ||
                 !isPhoneVerified || 
                 !signupPassStrength.isStrong || 
-                signupPassword !== confirmPassword ||
-                Boolean(emailDuplicateError)
+                signupPassword !== confirmPassword
               }
               className="w-full h-11 mt-2 bg-[#1b4d5e] hover:bg-[#153e4b] disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl font-bold text-xs uppercase tracking-wider transition-all shadow-md active:scale-[0.99]"
             >

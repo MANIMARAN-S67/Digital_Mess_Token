@@ -7,9 +7,10 @@ import {
   createUserWithEmailAndPassword, 
   signOut as firebaseSignOut,
   sendPasswordResetEmail,
+  fetchSignInMethodsForEmail,
   User as FirebaseUser
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp, collection, query, where, getDocs, updateDoc, limit } from 'firebase/firestore';
 import { initiateSalesforceOAuth, getSalesforceToken, handleSalesforceCallback, logoutSalesforce } from '../services/salesforceAuth';
 import sfApi from '../services/salesforceApi';
 import { salesforceSyncService } from '../services/salesforceSyncService';
@@ -466,22 +467,69 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const checkEmailExists = async (emailToTest: string): Promise<boolean> => {
     const cleanEmail = emailToTest.trim().toLowerCase();
-    if (!cleanEmail) return false;
+    if (!cleanEmail || !cleanEmail.includes('@')) return false;
+
+    // 1. Check Firebase Auth sign-in methods directly
+    try {
+      const methods = await fetchSignInMethodsForEmail(auth, cleanEmail);
+      if (methods && methods.length > 0) return true;
+    } catch (fbErr: any) {
+      if (fbErr?.code === 'auth/email-already-in-use') return true;
+      console.warn('Firebase Auth email check note:', fbErr);
+    }
+
+    // 2. Check Firebase Firestore 'users' collection with multiple queries and document scan
     try {
       const usersRef = collection(db, 'users');
+      // Direct exact match
       const q = query(usersRef, where('email', '==', cleanEmail));
       const snapshot = await getDocs(q);
       if (!snapshot.empty) return true;
+
+      // Raw casing match
+      if (emailToTest.trim() !== cleanEmail) {
+        const qRaw = query(usersRef, where('email', '==', emailToTest.trim()));
+        const snapRaw = await getDocs(qRaw);
+        if (!snapRaw.empty) return true;
+      }
+
+      // Scan existing users to catch any lowercase/uppercase or Email__c variance
+      const allUsersSnap = await getDocs(query(usersRef, limit(100)));
+      const foundInDocs = allUsersSnap.docs.some(docSnap => {
+        const d = docSnap.data();
+        const docEmail = (d.email || d.Email__c || d.userEmail || '').toLowerCase().trim();
+        return docEmail === cleanEmail;
+      });
+      if (foundInDocs) return true;
     } catch (e) {
       console.warn('Firestore email existence check note:', e);
     }
-    // Check locally registered cache
+
+    // 3. Check locally registered cache
     try {
       const cachedUsers = JSON.parse(localStorage.getItem('registered_users_cache') || '[]');
-      return cachedUsers.some((u: any) => u.email?.toLowerCase() === cleanEmail);
-    } catch (e) {
-      return false;
-    }
+      if (cachedUsers.some((u: any) => (u.email || '').toLowerCase().trim() === cleanEmail)) return true;
+    } catch (e) {}
+
+    // 4. Check password resets cache
+    try {
+      const resets = JSON.parse(localStorage.getItem('password_resets_cache') || '{}');
+      if (resets[cleanEmail]) return true;
+    } catch (e) {}
+
+    // 5. Check mess users cloud cache
+    try {
+      const messUsers = JSON.parse(localStorage.getItem('mess_users_cloud_cache') || '[]');
+      if (messUsers.some((u: any) => (u.email || u.Email__c || '').toLowerCase().trim() === cleanEmail)) return true;
+    } catch (e) {}
+
+    // 6. Check students cloud cache
+    try {
+      const students = JSON.parse(localStorage.getItem('students_cloud_cache') || '[]');
+      if (students.some((s: any) => (s.email || '').toLowerCase().trim() === cleanEmail)) return true;
+    } catch (e) {}
+
+    return false;
   };
 
   const checkPhoneExists = async (phoneToTest: string): Promise<boolean> => {
@@ -494,6 +542,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       const q = query(usersRef, where('phone', '==', cleanPhone));
       const snapshot = await getDocs(q);
       if (!snapshot.empty) return true;
+
+      // Scan existing users to catch format differences (+91, spaces, dashes, or Phone__c)
+      const allUsersSnap = await getDocs(query(usersRef, limit(100)));
+      const foundInDocs = allUsersSnap.docs.some(docSnap => {
+        const d = docSnap.data();
+        const p1 = (d.phone || '').replace(/\D/g, '').slice(-10);
+        const p2 = (d.Phone__c || '').replace(/\D/g, '').slice(-10);
+        const p3 = (d.mobile || '').replace(/\D/g, '').slice(-10);
+        return p1 === cleanPhone || p2 === cleanPhone || p3 === cleanPhone;
+      });
+      if (foundInDocs) return true;
     } catch (e) {
       console.warn('Firestore phone uniqueness check note:', e);
     }
@@ -952,7 +1011,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (err: any) {
       console.error('Email sign up error:', err);
       if (err?.code === 'auth/email-already-in-use') {
-        const errMsg = "This email address is already registered. Please sign in instead.";
+        const errMsg = "This email address is already registered. Duplicate emails are not allowed. Please sign in.";
         setAuthError(errMsg);
         throw new Error(errMsg);
       }
