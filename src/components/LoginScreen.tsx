@@ -820,7 +820,7 @@ export const LoginScreen: React.FC = () => {
                 <input
                   type="tel"
                   required
-                  placeholder="9876543210"
+                  placeholder="e.g. 9876543210"
                   value={phone}
                   onChange={(e) => handlePhoneChange(e.target.value)}
                   disabled={isPhoneVerified}
