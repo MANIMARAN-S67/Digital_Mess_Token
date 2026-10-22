@@ -99,6 +99,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   /**
+   * Helper to ensure Firestore and external network requests never hang the UI
+   */
+  const asyncWithTimeout = <T,>(promise: Promise<T>, ms = 1200): Promise<T> => {
+    let timer: any;
+    const timeoutPromise = new Promise<T>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('timeout')), ms);
+    });
+    return Promise.race([promise, timeoutPromise]).finally(() => clearTimeout(timer));
+  };
+
+  /**
    * Synchronizes user profile to Firestore backend, Salesforce (if connected),
    * and local/session persistence to ensure profile data is never lost.
    */
@@ -150,10 +161,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // 1. Sync with Firebase Firestore Backend (`users` collection)
     try {
       const userDocRef = doc(db, 'users', uid);
-      const userSnap = await getDoc(userDocRef);
+      let existingData: Partial<UserProfile> | null = null;
+      try {
+        const userSnap = await asyncWithTimeout(getDoc(userDocRef), 1200);
+        if (userSnap && userSnap.exists()) {
+          existingData = userSnap.data() as Partial<UserProfile>;
+        }
+      } catch (e) {}
 
-      if (userSnap.exists()) {
-        const existingData = userSnap.data() as Partial<UserProfile>;
+      if (existingData) {
         // If an existing registered record is a student, forbid access
         if (existingData.role === 'Student') {
           await firebaseSignOut(auth).catch(() => {});
@@ -178,18 +194,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         };
       }
 
-      // Upsert user profile to Firestore backend
-      await setDoc(userDocRef, {
-        ...userProfile,
-        email: email,
-        uid: uid,
-        phone: userProfile.phone || '',
-        displayName: userProfile.name,
-        role: userProfile.role,
-        department: userProfile.department,
-        lastLogin: serverTimestamp(),
-        updatedAt: serverTimestamp()
-      }, { merge: true });
+      // Upsert user profile to Firestore backend (safe timeout)
+      try {
+        await asyncWithTimeout(setDoc(userDocRef, {
+          ...userProfile,
+          email: email,
+          uid: uid,
+          phone: userProfile.phone || '',
+          displayName: userProfile.name,
+          role: userProfile.role,
+          department: userProfile.department,
+          lastLogin: serverTimestamp(),
+          updatedAt: serverTimestamp()
+        }, { merge: true }), 1500);
+      } catch (e) {}
 
       // Cache user locally for offline visibility and inspector
       try {
@@ -469,74 +487,51 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const cleanEmail = emailToTest.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) return false;
 
-    // 1. Check Firebase Auth sign-in methods directly
-    try {
-      const methods = await fetchSignInMethodsForEmail(auth, cleanEmail);
-      if (methods && methods.length > 0) return true;
-    } catch (fbErr: any) {
-      if (fbErr?.code === 'auth/email-already-in-use') return true;
-      console.warn('Firebase Auth email check note:', fbErr);
-    }
-
-    // 2. Check Firebase Firestore 'users' collection with multiple queries and document scan
-    try {
-      const usersRef = collection(db, 'users');
-      // Direct exact match
-      const q = query(usersRef, where('email', '==', cleanEmail));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) return true;
-
-      // Raw casing match
-      if (emailToTest.trim() !== cleanEmail) {
-        const qRaw = query(usersRef, where('email', '==', emailToTest.trim()));
-        const snapRaw = await getDocs(qRaw);
-        if (!snapRaw.empty) return true;
-      }
-
-      // Scan existing users to catch any lowercase/uppercase or Email__c variance
-      const allUsersSnap = await getDocs(query(usersRef, limit(100)));
-      const foundInDocs = allUsersSnap.docs.some(docSnap => {
-        const d = docSnap.data();
-        const docEmail = (d.email || d.Email__c || d.userEmail || '').toLowerCase().trim();
-        return docEmail === cleanEmail;
-      });
-      if (foundInDocs) return true;
-    } catch (e) {
-      console.warn('Firestore email existence check note:', e);
-    }
-
-    // 3. Check locally registered cache
+    // 1. Instant Synchronous Check: Locally registered and cached users
     try {
       const cachedUsers = JSON.parse(localStorage.getItem('registered_users_cache') || '[]');
       if (cachedUsers.some((u: any) => (u.email || '').toLowerCase().trim() === cleanEmail)) return true;
     } catch (e) {}
 
-    // 4. Check password resets cache
     try {
       const resets = JSON.parse(localStorage.getItem('password_resets_cache') || '{}');
       if (resets[cleanEmail]) return true;
     } catch (e) {}
 
-    // 5. Check mess users cloud cache
     try {
       const messUsers = JSON.parse(localStorage.getItem('mess_users_cloud_cache') || '[]');
       if (messUsers.some((u: any) => (u.email || u.Email__c || '').toLowerCase().trim() === cleanEmail)) return true;
     } catch (e) {}
 
-    // 6. Check students cloud cache
     try {
       const students = JSON.parse(localStorage.getItem('students_cloud_cache') || '[]');
       if (students.some((s: any) => (s.email || '').toLowerCase().trim() === cleanEmail)) return true;
     } catch (e) {}
 
-    // 7. Check Salesforce backend if connected
+    // 2. Check Firebase Auth sign-in methods directly (safe timeout)
+    try {
+      const methods = await asyncWithTimeout(fetchSignInMethodsForEmail(auth, cleanEmail), 800);
+      if (methods && methods.length > 0) return true;
+    } catch (fbErr: any) {
+      if (fbErr?.code === 'auth/email-already-in-use') return true;
+    }
+
+    // 3. Check Firebase Firestore 'users' collection (safe timeout)
+    try {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('email', '==', cleanEmail));
+      const snapshot = await asyncWithTimeout(getDocs(q), 800);
+      if (snapshot && !snapshot.empty) return true;
+    } catch (e) {}
+
+    // 4. Check Salesforce backend if connected (safe timeout)
     if (getSalesforceToken()) {
       try {
-        const sfRes = await sfApi.query(`SELECT Id FROM Mess_User__c WHERE Email__c = '${cleanEmail}' LIMIT 1`);
+        const sfRes = await asyncWithTimeout(sfApi.query(`SELECT Id FROM Mess_User__c WHERE Email__c = '${cleanEmail}' LIMIT 1`), 800);
         if (sfRes?.records && sfRes.records.length > 0) return true;
       } catch (e) {}
       try {
-        const sfStud = await sfApi.query(`SELECT Id FROM Student__c WHERE Email__c = '${cleanEmail}' LIMIT 1`);
+        const sfStud = await asyncWithTimeout(sfApi.query(`SELECT Id FROM Student__c WHERE Email__c = '${cleanEmail}' LIMIT 1`), 800);
         if (sfStud?.records && sfStud.records.length > 0) return true;
       } catch (e) {}
     }
@@ -548,28 +543,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const cleanPhone = phoneToTest.trim().replace(/\D/g, '').slice(-10);
     if (cleanPhone.length !== 10) return false;
 
-    // 1. Check Firebase Firestore 'users' collection
-    try {
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('phone', '==', cleanPhone));
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) return true;
-
-      // Scan existing users to catch format differences (+91, spaces, dashes, or Phone__c)
-      const allUsersSnap = await getDocs(query(usersRef, limit(100)));
-      const foundInDocs = allUsersSnap.docs.some(docSnap => {
-        const d = docSnap.data();
-        const p1 = (d.phone || '').replace(/\D/g, '').slice(-10);
-        const p2 = (d.Phone__c || '').replace(/\D/g, '').slice(-10);
-        const p3 = (d.mobile || '').replace(/\D/g, '').slice(-10);
-        return p1 === cleanPhone || p2 === cleanPhone || p3 === cleanPhone;
-      });
-      if (foundInDocs) return true;
-    } catch (e) {
-      console.warn('Firestore phone uniqueness check note:', e);
-    }
-
-    // 2. Check locally registered cache
+    // 1. Instant Synchronous Check: Locally registered and cached users
     try {
       const cachedUsers = JSON.parse(localStorage.getItem('registered_users_cache') || '[]');
       const inCache = cachedUsers.some((u: any) => {
@@ -579,7 +553,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (inCache) return true;
     } catch (e) {}
 
-    // 3. Check mess users cloud cache
     try {
       const messUsers = JSON.parse(localStorage.getItem('mess_users_cloud_cache') || '[]');
       const inMess = messUsers.some((u: any) => {
@@ -589,7 +562,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (inMess) return true;
     } catch (e) {}
 
-    // 4. Check students cloud cache
     try {
       const students = JSON.parse(localStorage.getItem('students_cloud_cache') || '[]');
       const inStudents = students.some((s: any) => {
@@ -599,14 +571,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (inStudents) return true;
     } catch (e) {}
 
-    // 5. Check Salesforce backend if connected
+    // 2. Check Firebase Firestore 'users' collection (safe timeout)
+    try {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('phone', '==', cleanPhone));
+      const snapshot = await asyncWithTimeout(getDocs(q), 800);
+      if (snapshot && !snapshot.empty) return true;
+    } catch (e) {}
+
+    // 3. Check Salesforce backend if connected (safe timeout)
     if (getSalesforceToken()) {
       try {
-        const sfRes = await sfApi.query(`SELECT Id FROM Mess_User__c WHERE Phone__c = '${cleanPhone}' LIMIT 1`);
+        const sfRes = await asyncWithTimeout(sfApi.query(`SELECT Id FROM Mess_User__c WHERE Phone__c = '${cleanPhone}' LIMIT 1`), 800);
         if (sfRes?.records && sfRes.records.length > 0) return true;
       } catch (e) {}
       try {
-        const sfStud = await sfApi.query(`SELECT Id FROM Student__c WHERE Phone__c = '${cleanPhone}' LIMIT 1`);
+        const sfStud = await asyncWithTimeout(sfApi.query(`SELECT Id FROM Student__c WHERE Phone__c = '${cleanPhone}' LIMIT 1`), 800);
         if (sfStud?.records && sfStud.records.length > 0) return true;
       } catch (e) {}
     }
