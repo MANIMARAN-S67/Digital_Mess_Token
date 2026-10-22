@@ -7,6 +7,7 @@ export const LoginScreen: React.FC = () => {
     signInWithEmail, 
     signUpWithEmail, 
     checkEmailExists,
+    checkPhoneExists,
     sendPhoneOtp,
     verifyPhoneOtp,
     sendPasswordResetOtp,
@@ -37,6 +38,8 @@ export const LoginScreen: React.FC = () => {
   const [phoneOtpLoading, setPhoneOtpLoading] = useState(false);
   const [phoneOtpError, setPhoneOtpError] = useState('');
   const [phoneOtpSuccess, setPhoneOtpSuccess] = useState('');
+  const [phoneDuplicateError, setPhoneDuplicateError] = useState('');
+  const [isCheckingPhone, setIsCheckingPhone] = useState(false);
   const [smsSimulatorToast, setSmsSimulatorToast] = useState<{ phone: string; otp: string } | null>(null);
   const [phoneOtpCountdown, setPhoneOtpCountdown] = useState(0);
 
@@ -124,6 +127,30 @@ export const LoginScreen: React.FC = () => {
     }
   };
 
+  // Real-time duplicate phone validation
+  const validatePhoneUniqueness = async (cleanedPhone: string) => {
+    if (cleanedPhone.length !== 10) {
+      setPhoneDuplicateError('');
+      return false;
+    }
+    setIsCheckingPhone(true);
+    try {
+      const exists = await checkPhoneExists(cleanedPhone);
+      if (exists) {
+        setPhoneDuplicateError('This mobile number is already registered. Duplicate phone numbers are not allowed.');
+        return false;
+      } else {
+        setPhoneDuplicateError('');
+        return true;
+      }
+    } catch {
+      setPhoneDuplicateError('');
+      return true;
+    } finally {
+      setIsCheckingPhone(false);
+    }
+  };
+
   // Google Sign-In Handler
   const handleGoogleClick = async () => {
     setIsGoogleSigningIn(true);
@@ -151,14 +178,23 @@ export const LoginScreen: React.FC = () => {
   };
 
   // Phone input formatting (digits only, max 10)
-  const handlePhoneChange = (val: string) => {
+  const handlePhoneChange = async (val: string) => {
     const cleaned = val.replace(/\D/g, '').slice(0, 10);
     setPhone(cleaned);
-    // Reset verification if user modifies phone number
+    setPhoneOtpError('');
+    setPhoneOtpSuccess('');
+
+    // Reset verification if user changes their phone number
     if (isPhoneVerified) {
       setIsPhoneVerified(false);
       setIsPhoneOtpSent(false);
       setPhoneOtp('');
+    }
+
+    if (cleaned.length === 10) {
+      await validatePhoneUniqueness(cleaned);
+    } else {
+      setPhoneDuplicateError('');
     }
   };
 
@@ -168,11 +204,20 @@ export const LoginScreen: React.FC = () => {
       setPhoneOtpError('Phone number must be exactly 10 digits.');
       return;
     }
+
     setPhoneOtpLoading(true);
     setPhoneOtpError('');
     setPhoneOtpSuccess('');
+
+    // Strict duplicate phone validation check before sending OTP
+    const isUnique = await validatePhoneUniqueness(phone);
+    if (!isUnique) {
+      setPhoneOtpLoading(false);
+      return;
+    }
+
     try {
-      const res = await sendPhoneOtp(phone);
+      const res = await sendPhoneOtp(phone, true);
       setIsPhoneOtpSent(true);
       setPhoneOtpCountdown(60);
       setPhoneOtpSuccess(`OTP sent to +91 ${phone}! Check your SMS.`);
@@ -184,21 +229,22 @@ export const LoginScreen: React.FC = () => {
     }
   };
 
-  // Verify Phone OTP
-  const handleVerifyPhoneOtp = async () => {
-    if (!phoneOtp.trim()) {
-      setPhoneOtpError('Please enter the 6-digit OTP code.');
+  // Verify Phone OTP (supports manual click and auto-verify)
+  const handleVerifyPhoneOtp = async (codeOverride?: string) => {
+    const code = (codeOverride || phoneOtp).trim();
+    if (code.length !== 6) {
+      setPhoneOtpError('Please enter the complete 6-digit OTP code.');
       return;
     }
     setPhoneOtpLoading(true);
     setPhoneOtpError('');
     try {
-      await verifyPhoneOtp(phone, phoneOtp);
+      await verifyPhoneOtp(phone, code);
       setIsPhoneVerified(true);
-      setPhoneOtpSuccess('Phone number verified successfully!');
+      setPhoneOtpSuccess(`Phone number (+91 ${phone}) verified successfully!`);
       setSmsSimulatorToast(null);
     } catch (err: any) {
-      setPhoneOtpError(err?.message || 'Incorrect OTP code.');
+      setPhoneOtpError(err?.message || 'Invalid or expired OTP code. Please try again.');
     } finally {
       setPhoneOtpLoading(false);
     }
@@ -221,24 +267,29 @@ export const LoginScreen: React.FC = () => {
       return;
     }
 
-    // 3. Ensure phone OTP is verified
+    // 3. Ensure phone is not duplicate
+    if (phoneDuplicateError) {
+      return;
+    }
+
+    // 4. Ensure phone OTP is verified
     if (!isPhoneVerified) {
       setPhoneOtpError('Please verify your phone number with the OTP code before registering.');
       return;
     }
 
-    // 4. Validate duplicate email
+    // 5. Validate duplicate email
     if (emailDuplicateError) {
       return;
     }
 
-    // 5. Validate strong password
+    // 6. Validate strong password
     if (!signupPassStrength.isStrong) {
       alert('Password is not strong enough. Please satisfy all password security requirements.');
       return;
     }
 
-    // 6. Check passwords match
+    // 7. Check passwords match
     if (signupPassword !== confirmPassword) {
       alert('Passwords do not match. Please re-enter.');
       return;
@@ -281,7 +332,7 @@ export const LoginScreen: React.FC = () => {
     e.preventDefault();
     clearAuthError();
 
-    if (!emailOtp.trim()) {
+    if (!emailOtp.trim() || emailOtp.length !== 6) {
       alert('Please enter the 6-digit OTP code sent to your email.');
       return;
     }
@@ -312,9 +363,9 @@ export const LoginScreen: React.FC = () => {
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-[#0c131f] via-[#131b26] to-[#1c2534] p-4 sm:p-6 font-sans">
       
-      {/* Real-time SMS Simulator Notification Banner (for Testing / Easy Verification) */}
+      {/* Real-time SMS Simulator Notification Banner (for Live Verification) */}
       {smsSimulatorToast && (
-        <div className="fixed top-5 right-5 z-50 max-w-sm bg-gray-900 border border-emerald-500/40 text-white rounded-2xl p-4 shadow-2xl backdrop-blur-md animate-bounce-short">
+        <div className="fixed top-5 right-5 z-50 max-w-sm bg-gray-900 border border-emerald-500/50 text-white rounded-2xl p-4 shadow-2xl backdrop-blur-md animate-bounce-short">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2 text-emerald-400 font-bold text-xs uppercase tracking-wider">
               <span className="material-symbols-outlined text-[18px]">sms</span>
@@ -331,19 +382,19 @@ export const LoginScreen: React.FC = () => {
           <p className="text-xs text-gray-300 mt-2">
             Verification code sent to <strong className="text-white">+91 {smsSimulatorToast.phone}</strong>:
           </p>
-          <div className="mt-2 flex items-center justify-between bg-black/40 px-3 py-2 rounded-xl border border-white/10">
-            <span className="font-mono text-xl font-extrabold text-emerald-400 tracking-widest">
+          <div className="mt-2.5 flex items-center justify-between bg-black/50 px-3.5 py-2.5 rounded-xl border border-white/10 gap-3">
+            <span className="font-mono text-2xl font-black text-emerald-400 tracking-widest">
               {smsSimulatorToast.otp}
             </span>
             <button
               type="button"
               onClick={() => {
                 setPhoneOtp(smsSimulatorToast.otp);
-                setSmsSimulatorToast(null);
+                handleVerifyPhoneOtp(smsSimulatorToast.otp);
               }}
-              className="text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded-lg font-bold"
+              className="text-xs bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white px-3 py-1.5 rounded-lg font-bold transition-all shadow-sm"
             >
-              Auto-Fill
+              Auto-Fill &amp; Verify
             </button>
           </div>
         </div>
@@ -351,7 +402,7 @@ export const LoginScreen: React.FC = () => {
 
       {/* Real-time Institutional Email OTP Notification Banner */}
       {emailSimulatorToast && (
-        <div className="fixed top-5 left-5 z-50 max-w-sm bg-gray-900 border border-sky-500/40 text-white rounded-2xl p-4 shadow-2xl backdrop-blur-md animate-bounce-short">
+        <div className="fixed top-5 left-5 z-50 max-w-sm bg-gray-900 border border-sky-500/50 text-white rounded-2xl p-4 shadow-2xl backdrop-blur-md animate-bounce-short">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2 text-sky-400 font-bold text-xs uppercase tracking-wider">
               <span className="material-symbols-outlined text-[18px]">mark_email_read</span>
@@ -368,8 +419,8 @@ export const LoginScreen: React.FC = () => {
           <p className="text-xs text-gray-300 mt-2">
             Password reset OTP sent to <strong className="text-white">{emailSimulatorToast.email}</strong>:
           </p>
-          <div className="mt-2 flex items-center justify-between bg-black/40 px-3 py-2 rounded-xl border border-white/10">
-            <span className="font-mono text-xl font-extrabold text-sky-400 tracking-widest">
+          <div className="mt-2.5 flex items-center justify-between bg-black/50 px-3.5 py-2.5 rounded-xl border border-white/10 gap-3">
+            <span className="font-mono text-2xl font-black text-sky-400 tracking-widest">
               {emailSimulatorToast.otp}
             </span>
             <button
@@ -378,7 +429,7 @@ export const LoginScreen: React.FC = () => {
                 setEmailOtp(emailSimulatorToast.otp);
                 setEmailSimulatorToast(null);
               }}
-              className="text-[11px] bg-sky-600 hover:bg-sky-500 text-white px-2.5 py-1 rounded-lg font-bold"
+              className="text-xs bg-sky-600 hover:bg-sky-500 active:scale-95 text-white px-3 py-1.5 rounded-lg font-bold transition-all shadow-sm"
             >
               Auto-Fill
             </button>
@@ -650,14 +701,14 @@ export const LoginScreen: React.FC = () => {
               )}
             </div>
 
-            {/* Phone Number (10 Digits) & OTP Verification */}
+            {/* Phone Number (10 Digits) & Non-Duplicate OTP Verification */}
             <div>
               <div className="flex justify-between items-center mb-1">
                 <label className="block text-[11px] font-bold text-gray-600 uppercase">
                   Phone Number (10 Digits) <span className="text-red-500">*</span>
                 </label>
-                <span className="text-[10px] font-bold text-gray-400">
-                  {phone.length}/10 digits
+                <span className={`text-[10px] font-bold ${phone.length === 10 ? 'text-emerald-600' : 'text-gray-400'}`}>
+                  {isCheckingPhone ? 'Validating phone...' : `${phone.length}/10 digits`}
                 </span>
               </div>
 
@@ -671,58 +722,115 @@ export const LoginScreen: React.FC = () => {
                   placeholder="9876543210"
                   value={phone}
                   onChange={(e) => handlePhoneChange(e.target.value)}
+                  disabled={isPhoneVerified}
                   className={`flex-1 h-10 px-3 border rounded-xl text-sm font-mono text-gray-900 outline-none transition-all ${
-                    isPhoneVerified 
+                    phoneDuplicateError
+                      ? 'border-red-400 bg-red-50/50'
+                      : isPhoneVerified 
                       ? 'border-emerald-500 bg-emerald-50/40' 
                       : 'border-gray-300 focus:border-[#1b4d5e]'
                   }`}
                 />
+
                 {!isPhoneVerified ? (
                   <button
                     type="button"
                     onClick={handleSendPhoneOtp}
-                    disabled={phone.length !== 10 || phoneOtpLoading || phoneOtpCountdown > 0}
-                    className="px-3 h-10 bg-[#1b4d5e] hover:bg-[#153e4b] disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl text-xs font-bold transition-all shrink-0"
+                    disabled={
+                      phone.length !== 10 || 
+                      phoneOtpLoading || 
+                      phoneOtpCountdown > 0 || 
+                      Boolean(phoneDuplicateError) || 
+                      isCheckingPhone
+                    }
+                    className="px-3.5 h-10 bg-[#1b4d5e] hover:bg-[#153e4b] disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl text-xs font-bold transition-all shrink-0 active:scale-95 shadow-sm"
                   >
                     {phoneOtpLoading ? 'Sending...' : phoneOtpCountdown > 0 ? `${phoneOtpCountdown}s` : isPhoneOtpSent ? 'Resend OTP' : 'Send OTP'}
                   </button>
                 ) : (
-                  <div className="flex items-center gap-1 px-2.5 h-10 bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold shrink-0">
+                  <div className="flex items-center gap-1.5 px-3 h-10 bg-emerald-100 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-bold shrink-0">
                     <span className="material-symbols-outlined text-[16px] text-emerald-600">verified</span>
                     <span>Verified</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsPhoneVerified(false);
+                        setIsPhoneOtpSent(false);
+                        setPhoneOtp('');
+                        setPhoneOtpSuccess('');
+                      }}
+                      className="text-[10px] text-emerald-700 underline ml-1 hover:text-emerald-900"
+                    >
+                      Change
+                    </button>
                   </div>
                 )}
               </div>
 
-              {/* OTP Input Field if OTP Sent and Not Verified */}
+              {/* Duplicate Phone Error Banner */}
+              {phoneDuplicateError && (
+                <p className="text-[11px] font-bold text-red-600 mt-1 flex items-center gap-1 animate-fadeIn">
+                  <span className="material-symbols-outlined text-[14px]">error</span>
+                  <span>{phoneDuplicateError}</span>
+                </p>
+              )}
+
+              {/* OTP Input Field when OTP is dispatched */}
               {isPhoneOtpSent && !isPhoneVerified && (
-                <div className="mt-2.5 p-3 bg-gray-50 border border-gray-200 rounded-xl flex flex-col gap-2 animate-fadeIn">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-gray-600">
-                    <span>Enter 6-Digit SMS OTP</span>
-                    <span className="text-gray-400">Sent to +91 {phone}</span>
+                <div className="mt-2.5 p-3.5 bg-gradient-to-r from-sky-50 to-emerald-50 border border-sky-200 rounded-2xl flex flex-col gap-2.5 animate-fadeIn shadow-xs">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-gray-700">
+                    <span className="flex items-center gap-1 text-[#1b4d5e]">
+                      <span className="material-symbols-outlined text-[15px]">sms</span>
+                      <span>Enter 6-Digit SMS Verification Code</span>
+                    </span>
+                    <span className="text-gray-500 font-mono text-[10px]">+91 {phone}</span>
                   </div>
+
                   <div className="flex gap-2">
                     <input
                       type="text"
                       maxLength={6}
-                      placeholder="e.g. 583921"
+                      autoFocus
+                      placeholder="••••••"
                       value={phoneOtp}
-                      onChange={(e) => setPhoneOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                      className="flex-1 h-10 px-3 border border-gray-300 rounded-xl font-mono text-sm tracking-widest text-center text-gray-900 focus:border-[#1b4d5e] outline-none"
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                        setPhoneOtp(val);
+                        if (val.length === 6) {
+                          handleVerifyPhoneOtp(val);
+                        }
+                      }}
+                      className="flex-1 h-11 px-3 border border-gray-300 rounded-xl font-mono text-base tracking-widest text-center text-gray-900 focus:border-[#1b4d5e] bg-white outline-none shadow-inner"
                     />
                     <button
                       type="button"
-                      onClick={handleVerifyPhoneOtp}
+                      onClick={() => handleVerifyPhoneOtp()}
                       disabled={phoneOtp.length !== 6 || phoneOtpLoading}
-                      className="px-4 h-10 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shrink-0"
+                      className="px-4 h-11 bg-emerald-600 hover:bg-emerald-700 active:scale-95 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shrink-0 shadow-sm"
                     >
-                      {phoneOtpLoading ? 'Checking...' : 'Verify OTP'}
+                      {phoneOtpLoading ? 'Verifying...' : 'Verify OTP'}
                     </button>
                   </div>
+
+                  {smsSimulatorToast && (
+                    <div className="flex items-center justify-between bg-white/80 px-2.5 py-1.5 rounded-lg border border-emerald-200">
+                      <span className="text-[10px] text-gray-600">Dispatched Code: <strong className="font-mono text-emerald-700">{smsSimulatorToast.otp}</strong></span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPhoneOtp(smsSimulatorToast.otp);
+                          handleVerifyPhoneOtp(smsSimulatorToast.otp);
+                        }}
+                        className="text-[10px] text-emerald-700 hover:text-emerald-900 font-bold underline"
+                      >
+                        Click to Auto-Fill
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Status messages for Phone OTP */}
+              {/* Status feedback for Phone OTP */}
               {phoneOtpError && (
                 <p className="text-[11px] font-bold text-red-600 mt-1 flex items-center gap-1">
                   <span className="material-symbols-outlined text-[14px]">error</span>
@@ -849,6 +957,7 @@ export const LoginScreen: React.FC = () => {
                 !fullName.trim() || 
                 !signupEmail.trim() || 
                 !phone.trim() || 
+                Boolean(phoneDuplicateError) ||
                 !isPhoneVerified || 
                 !signupPassStrength.isStrong || 
                 signupPassword !== confirmPassword ||

@@ -488,7 +488,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const cleanPhone = phoneToTest.trim().replace(/\D/g, '').slice(-10);
     if (cleanPhone.length !== 10) return false;
 
-    // Check Firebase Firestore 'users' collection
+    // 1. Check Firebase Firestore 'users' collection
     try {
       const usersRef = collection(db, 'users');
       const q = query(usersRef, where('phone', '==', cleanPhone));
@@ -498,7 +498,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.warn('Firestore phone uniqueness check note:', e);
     }
 
-    // Check locally registered cache
+    // 2. Check locally registered cache
     try {
       const cachedUsers = JSON.parse(localStorage.getItem('registered_users_cache') || '[]');
       const inCache = cachedUsers.some((u: any) => {
@@ -506,9 +506,27 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return p === cleanPhone;
       });
       if (inCache) return true;
-    } catch (e) {
-      return false;
-    }
+    } catch (e) {}
+
+    // 3. Check mess users cloud cache
+    try {
+      const messUsers = JSON.parse(localStorage.getItem('mess_users_cloud_cache') || '[]');
+      const inMess = messUsers.some((u: any) => {
+        const p = (u.phone || u.Phone__c || '').replace(/\D/g, '').slice(-10);
+        return p === cleanPhone;
+      });
+      if (inMess) return true;
+    } catch (e) {}
+
+    // 4. Check students cloud cache
+    try {
+      const students = JSON.parse(localStorage.getItem('students_cloud_cache') || '[]');
+      const inStudents = students.some((s: any) => {
+        const p = (s.phone || '').replace(/\D/g, '').slice(-10);
+        return p === cleanPhone;
+      });
+      if (inStudents) return true;
+    } catch (e) {}
 
     return false;
   };
