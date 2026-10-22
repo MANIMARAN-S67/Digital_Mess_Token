@@ -351,12 +351,26 @@ export const LoginScreen: React.FC = () => {
         (msg.toLowerCase().includes('already') || msg.toLowerCase().includes('duplicate') || msg.toLowerCase().includes('in-use'))
       ) {
         setEmailDuplicateError('This email is already registered. Duplicate emails are not allowed. Please sign in.');
+        try {
+          const cached = JSON.parse(localStorage.getItem('registered_users_cache') || '[]');
+          if (!cached.some((u: any) => (u.email || '').toLowerCase() === signupEmail.trim().toLowerCase())) {
+            cached.push({ email: signupEmail.trim().toLowerCase(), phone: phone.trim() });
+            localStorage.setItem('registered_users_cache', JSON.stringify(cached));
+          }
+        } catch (e) {}
       }
       if (
         (msg.toLowerCase().includes('phone') || msg.toLowerCase().includes('mobile')) &&
         (msg.toLowerCase().includes('already') || msg.toLowerCase().includes('duplicate'))
       ) {
         setPhoneDuplicateError('This phone number is already registered. Duplicate phone numbers are not allowed.');
+        try {
+          const cached = JSON.parse(localStorage.getItem('registered_users_cache') || '[]');
+          if (!cached.some((u: any) => (u.phone || '').replace(/\D/g, '').slice(-10) === phone.trim().slice(-10))) {
+            cached.push({ email: signupEmail.trim().toLowerCase(), phone: phone.trim() });
+            localStorage.setItem('registered_users_cache', JSON.stringify(cached));
+          }
+        } catch (e) {}
       }
     } finally {
       setSubmitting(false);

@@ -529,6 +529,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (students.some((s: any) => (s.email || '').toLowerCase().trim() === cleanEmail)) return true;
     } catch (e) {}
 
+    // 7. Check Salesforce backend if connected
+    if (getSalesforceToken()) {
+      try {
+        const sfRes = await sfApi.query(`SELECT Id FROM Mess_User__c WHERE Email__c = '${cleanEmail}' LIMIT 1`);
+        if (sfRes?.records && sfRes.records.length > 0) return true;
+      } catch (e) {}
+      try {
+        const sfStud = await sfApi.query(`SELECT Id FROM Student__c WHERE Email__c = '${cleanEmail}' LIMIT 1`);
+        if (sfStud?.records && sfStud.records.length > 0) return true;
+      } catch (e) {}
+    }
+
     return false;
   };
 
@@ -586,6 +598,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       if (inStudents) return true;
     } catch (e) {}
+
+    // 5. Check Salesforce backend if connected
+    if (getSalesforceToken()) {
+      try {
+        const sfRes = await sfApi.query(`SELECT Id FROM Mess_User__c WHERE Phone__c = '${cleanPhone}' LIMIT 1`);
+        if (sfRes?.records && sfRes.records.length > 0) return true;
+      } catch (e) {}
+      try {
+        const sfStud = await sfApi.query(`SELECT Id FROM Student__c WHERE Phone__c = '${cleanPhone}' LIMIT 1`);
+        if (sfStud?.records && sfStud.records.length > 0) return true;
+      } catch (e) {}
+    }
 
     return false;
   };
