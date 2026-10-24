@@ -9,24 +9,22 @@
                 
                 <!-- Left: Title, Live Status & Logged-in User Info -->
                 <div class="slds-col slds-size_1-of-1 slds-large-size_7-of-12 slds-grid slds-grid_vertical-align-center slds-m-bottom_small slds-large-m-bottom_none">
-                    <div class="user-avatar-pill slds-p-around_small slds-m-right_medium slds-text-align_center slds-shrink-none">
-                        <div class="slds-text-heading_medium" style="font-weight: 900; line-height: 1; letter-spacing: 0.05em;">
-                            {userInitials}
-                        </div>
+                    <div class="user-avatar-badge slds-m-right_medium">
+                        {userInitials}
                     </div>
                     <div>
                         <div class="slds-grid slds-grid_vertical-align-center slds-m-bottom_xx-small">
                             <span class="live-pulse-dot slds-m-right_x-small"></span>
-                            <span class="slds-text-title_caps" style="font-size: 0.7rem; font-weight: 800; color: #a7f3d0; letter-spacing: 0.1em;">
-                                Live Dining Operations Active
+                            <span class="slds-text-title_caps" style="font-size: 0.72rem; font-weight: 800; color: #34d399; letter-spacing: 0.1em;">
+                                Live Dining Operations Active &bull; Salesforce Cloud Synced
                             </span>
                         </div>
-                        <h1 class="slds-text-heading_medium" style="font-weight: 800; color: #ffffff;">
+                        <h1 class="slds-text-heading_medium" style="font-weight: 900; color: #ffffff; letter-spacing: -0.01em;">
                             Digital Mess Management Command Center
                         </h1>
                         <p class="slds-text-body_small slds-m-top_xx-small" style="color: #cbd5e1;">
                             Welcome back, <strong style="color: #ffffff;">{userName}</strong> &nbsp;|&nbsp; 
-                            <span class="slds-badge slds-badge_inverse" style="background: rgba(255,255,255,0.2);">{userProfile}</span> &nbsp;|&nbsp; 
+                            <span class="slds-badge slds-badge_inverse" style="background: rgba(255,255,255,0.2); font-weight: 700;">{userProfile}</span> &nbsp;|&nbsp; 
                             <span style="color: #94a3b8;">Email:</span> {userEmail}
                         </p>
                     </div>
@@ -40,21 +38,21 @@
                         variant="neutral" 
                         onclick={handleRefresh}
                         disabled={isRefreshing}
-                        class="slds-m-right_x-small slds-m-bottom_xx-small">
+                        class="header-action-btn slds-m-right_x-small slds-m-bottom_xx-small">
                     </lightning-button>
                     <lightning-button 
                         label="Login Users &amp; Issuers" 
                         icon-name="standard:user" 
                         variant="brand-outline" 
                         onclick={navigateToMessUsers}
-                        class="slds-m-right_x-small slds-m-bottom_xx-small">
+                        class="header-action-btn slds-m-right_x-small slds-m-bottom_xx-small">
                     </lightning-button>
                     <lightning-button 
                         label="Students Roster" 
                         icon-name="standard:contact" 
                         variant="brand" 
                         onclick={navigateToStudents}
-                        class="slds-m-bottom_xx-small">
+                        class="header-action-btn slds-m-bottom_xx-small">
                     </lightning-button>
                 </div>
 
@@ -62,82 +60,112 @@
         </div>
 
         <!-- ============================================================ -->
-        <!-- 2. EXECUTIVE KPI CARDS ROW                                   -->
+        <!-- 2. EXECUTIVE BENTO KPI METRICS ROW (5 CARDS)                  -->
         <!-- ============================================================ -->
         <div class="slds-grid slds-wrap slds-gutters slds-m-bottom_medium">
             
             <!-- KPI 1: Tokens Issued Today -->
-            <div class="slds-col slds-size_1-of-1 slds-medium-size_6-of-12 slds-large-size_3-of-12 slds-m-bottom_small">
+            <div class="slds-col slds-size_1-of-1 slds-medium-size_6-of-12 slds-large-size_1-of-5 slds-m-bottom_small">
                 <div class="kpi-card kpi-card-tokens slds-p-around_medium">
                     <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
-                        <span class="slds-text-title_caps slds-text-color_weak" style="font-weight: 700;">Tokens Issued Today</span>
-                        <lightning-icon icon-name="custom:custom44" size="small"></lightning-icon>
+                        <span class="slds-text-title_caps slds-text-color_weak" style="font-weight: 800; font-size: 0.68rem;">Tokens Today</span>
+                        <div class="kpi-icon-wrap kpi-icon-tokens">
+                            <lightning-icon icon-name="custom:custom44" size="x-small"></lightning-icon>
+                        </div>
                     </div>
-                    <div class="slds-text-heading_large slds-m-top_x-small" style="font-weight: 900; color: #002b5c;">
+                    <div class="kpi-number slds-m-top_x-small" style="color: #002b5c;">
                         {totalTokensToday}
                     </div>
-                    <div class="slds-grid slds-wrap slds-gutters_xx-small slds-m-top_small slds-text-body_small" style="font-size: 0.75rem;">
-                        <span class="slds-col slds-text-color_weak">🍳 B: <strong>{breakfastCount}</strong></span>
-                        <span class="slds-col slds-text-color_weak">🍛 L: <strong>{lunchCount}</strong></span>
-                        <span class="slds-col slds-text-color_weak">☕ S: <strong>{snacksCount}</strong></span>
-                        <span class="slds-col slds-text-color_weak">🍲 D: <strong>{dinnerCount}</strong></span>
+                    <div class="slds-grid slds-wrap slds-gutters_xx-small slds-m-top_small">
+                        <span class="meal-chip slds-m-bottom_xx-small">🍳 B: <strong>{breakfastCount}</strong></span>
+                        <span class="meal-chip slds-m-bottom_xx-small">🍛 L: <strong>{lunchCount}</strong></span>
+                        <span class="meal-chip slds-m-bottom_xx-small">☕ S: <strong>{snacksCount}</strong></span>
+                        <span class="meal-chip slds-m-bottom_xx-small">🍲 D: <strong>{dinnerCount}</strong></span>
                     </div>
                 </div>
             </div>
 
             <!-- KPI 2: Diet Preference Breakdown -->
-            <div class="slds-col slds-size_1-of-1 slds-medium-size_6-of-12 slds-large-size_3-of-12 slds-m-bottom_small">
+            <div class="slds-col slds-size_1-of-1 slds-medium-size_6-of-12 slds-large-size_1-of-5 slds-m-bottom_small">
                 <div class="kpi-card kpi-card-diet slds-p-around_medium">
                     <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
-                        <span class="slds-text-title_caps slds-text-color_weak" style="font-weight: 700;">Meal Dietary Split</span>
-                        <lightning-icon icon-name="custom:custom5" size="small"></lightning-icon>
+                        <span class="slds-text-title_caps slds-text-color_weak" style="font-weight: 800; font-size: 0.68rem;">Dietary Split</span>
+                        <div class="kpi-icon-wrap kpi-icon-diet">
+                            <lightning-icon icon-name="custom:custom5" size="x-small"></lightning-icon>
+                        </div>
                     </div>
                     <div class="slds-grid slds-grid_vertical-align-baseline slds-m-top_x-small">
-                        <span class="slds-text-heading_large" style="font-weight: 900; color: #065f46;">{vegCount}</span>
-                        <span class="slds-m-horizontal_x-small slds-text-color_weak">Veg vs</span>
-                        <span class="slds-text-heading_medium" style="font-weight: 800; color: #9a3412;">{nonVegCount}</span>
-                        <span class="slds-m-left_xx-small slds-text-color_weak">Non-Veg</span>
+                        <span class="kpi-number" style="color: #059669;">{vegCount}</span>
+                        <span class="slds-m-horizontal_xx-small slds-text-color_weak" style="font-weight: 600;">Veg vs</span>
+                        <span class="slds-text-heading_medium" style="font-weight: 900; color: #ea580c;">{nonVegCount}</span>
+                        <span class="slds-m-left_xx-small slds-text-color_weak" style="font-size: 0.75rem;">Non-Veg</span>
                     </div>
                     <!-- Dual progress bar -->
                     <div class="diet-bar-track slds-m-top_small">
                         <div class="diet-bar-veg" style={vegStyleWidth}></div>
                     </div>
-                    <div class="slds-grid slds-grid_align-spread slds-m-top_xx-small slds-text-body_small" style="font-size: 0.7rem; color: #64748b;">
-                        <span>{vegPercentage}% Veg</span>
+                    <div class="slds-grid slds-grid_align-spread slds-m-top_xx-small slds-text-body_small" style="font-size: 0.7rem; color: #64748b; font-weight: 600;">
+                        <span>{vegPercentage}% Vegetarian</span>
                         <span>{nonVegCount} Non-Veg</span>
                     </div>
                 </div>
             </div>
 
-            <!-- KPI 3: Registered Students -->
-            <div class="slds-col slds-size_1-of-1 slds-medium-size_6-of-12 slds-large-size_3-of-12 slds-m-bottom_small">
-                <div class="kpi-card kpi-card-students slds-p-around_medium">
+            <!-- KPI 3: Registered Students & Turnout -->
+            <div class="slds-col slds-size_1-of-1 slds-medium-size_6-of-12 slds-large-size_1-of-5 slds-m-bottom_small">
+                <div class="kpi-card kpi-card-attendance slds-p-around_medium">
                     <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
-                        <span class="slds-text-title_caps slds-text-color_weak" style="font-weight: 700;">Enrolled Students</span>
-                        <lightning-icon icon-name="standard:avatar" size="small"></lightning-icon>
+                        <span class="slds-text-title_caps slds-text-color_weak" style="font-weight: 800; font-size: 0.68rem;">Hostel Attendance</span>
+                        <div class="kpi-icon-wrap kpi-icon-attendance">
+                            <lightning-icon icon-name="standard:avatar" size="x-small"></lightning-icon>
+                        </div>
                     </div>
-                    <div class="slds-text-heading_large slds-m-top_x-small" style="font-weight: 900; color: #1a365d;">
-                        {totalStudents}
+                    <div class="slds-grid slds-grid_vertical-align-baseline slds-m-top_x-small">
+                        <span class="kpi-number" style="color: #2563eb;">{presentStudentsCount}</span>
+                        <span class="slds-m-horizontal_xx-small slds-text-color_weak" style="font-weight: 600;">/</span>
+                        <span class="slds-text-heading_medium" style="font-weight: 800; color: #64748b;">{totalStudents}</span>
+                        <span class="slds-m-left_xx-small slds-text-color_weak" style="font-size: 0.75rem;">Present</span>
                     </div>
                     <div class="slds-grid slds-grid_align-spread slds-m-top_small slds-text-body_small">
-                        <span class="slds-text-color_weak">Dining Attendance Rate:</span>
-                        <span class="slds-badge slds-theme_success" style="font-weight: 800;">{attendanceRate}%</span>
+                        <span class="slds-badge slds-theme_success" style="font-weight: 800;">{attendanceRate}% Turnout</span>
+                        <span class="slds-text-color_weak" style="font-size: 0.72rem; font-weight: 600;">{absentStudentsCount} Absent</span>
                     </div>
                 </div>
             </div>
 
-            <!-- KPI 4: Active Login Users / Token Issuers -->
-            <div class="slds-col slds-size_1-of-1 slds-medium-size_6-of-12 slds-large-size_3-of-12 slds-m-bottom_small">
+            <!-- KPI 4: Food Waste Prevention Guard (NEW) -->
+            <div class="slds-col slds-size_1-of-1 slds-medium-size_6-of-12 slds-large-size_1-of-5 slds-m-bottom_small">
+                <div class="kpi-card kpi-card-waste slds-p-around_medium">
+                    <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
+                        <span class="slds-text-title_caps" style="font-weight: 800; font-size: 0.68rem; color: #059669;">Waste Guard</span>
+                        <div class="kpi-icon-wrap kpi-icon-waste">
+                            <lightning-icon icon-name="utility:shield" size="x-small"></lightning-icon>
+                        </div>
+                    </div>
+                    <div class="kpi-number slds-m-top_x-small" style="color: #059669;">
+                        +{foodPortionsSaved} Saved
+                    </div>
+                    <div class="slds-grid slds-grid_align-spread slds-m-top_small slds-text-body_small">
+                        <span style="font-size: 0.72rem; color: #047857; font-weight: 700;">Over-Cooking Avoided</span>
+                        <span class="slds-badge" style="background: #d1fae5; color: #065f46; font-weight: 800; font-size: 0.7rem;">~{estFoodKgsPrevented} kg</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- KPI 5: Active Login Users / Token Issuers -->
+            <div class="slds-col slds-size_1-of-1 slds-medium-size_6-of-12 slds-large-size_1-of-5 slds-m-bottom_small">
                 <div class="kpi-card kpi-card-users slds-p-around_medium">
                     <div class="slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
-                        <span class="slds-text-title_caps slds-text-color_weak" style="font-weight: 700;">Login Accounts &amp; Issuers</span>
-                        <lightning-icon icon-name="standard:user" size="small"></lightning-icon>
+                        <span class="slds-text-title_caps slds-text-color_weak" style="font-weight: 800; font-size: 0.68rem;">Issuing Staff</span>
+                        <div class="kpi-icon-wrap kpi-icon-users">
+                            <lightning-icon icon-name="standard:user" size="x-small"></lightning-icon>
+                        </div>
                     </div>
-                    <div class="slds-text-heading_large slds-m-top_x-small" style="font-weight: 900; color: #c46a24;">
+                    <div class="kpi-number slds-m-top_x-small" style="color: #ea580c;">
                         {totalMessUsers}
                     </div>
-                    <div class="slds-m-top_small slds-text-body_small slds-text-color_weak">
-                        Managers &amp; Principals with Token Rights
+                    <div class="slds-m-top_small slds-text-body_small slds-text-color_weak" style="font-size: 0.75rem; font-weight: 600;">
+                        Managers &amp; Operators Active
                     </div>
                 </div>
             </div>
@@ -182,41 +210,36 @@
 
                         <!-- Tokens Table -->
                         <template if:true={hasTokens}>
-                            <div class="slds-scrollable_x slds-border_top slds-border_bottom">
+                            <div class="slds-scrollable_x slds-border_top slds-border_bottom" style="border-radius: 8px;">
                                 <table class="slds-table slds-table_cell-buffer slds-table_bordered slds-table_striped">
                                     <thead>
-                                        <tr class="slds-line-height_reset" style="background: #f8fafc;">
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Token #</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Student Name</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Roll Number</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Department &amp; Room</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Meal Session</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Diet</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Time</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Issued By (Login Account)</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Status</div></th>
+                                        <tr class="slds-line-height_reset" style="background: #f1f5f9;">
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Token #</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Resident Student</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Hostel &amp; Room</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Meal Session</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Diet Preference</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Issue Time</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Issued By (Staff Account)</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Status</div></th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         <template for:each={filteredTokens} for:item="token">
                                             <tr key={token.Id}>
                                                 <td>
-                                                    <span class="badge-token-num">{token.Token_Number__c}</span>
+                                                    <span class="badge-token-pill">{token.Token_Number__c}</span>
                                                 </td>
                                                 <td>
                                                     <div class="slds-truncate" style="font-weight: 700; color: #002b5c;">
                                                         {token.StudentName}
                                                     </div>
-                                                </td>
-                                                <td>
-                                                    <div class="slds-truncate slds-text-color_weak font-mono" style="font-weight: 600;">
-                                                        {token.StudentRoll}
+                                                    <div class="slds-truncate slds-text-color_weak" style="font-size: 0.72rem; font-family: monospace;">
+                                                        {token.StudentRoll} &bull; {token.StudentDept}
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <div class="slds-truncate slds-text-color_weak">
-                                                        {token.StudentDept}
-                                                    </div>
+                                                    <span class="badge-hostel-room">{token.StudentRoom}</span>
                                                 </td>
                                                 <td>
                                                     <div class="slds-truncate" style="font-weight: 600;">
@@ -227,7 +250,7 @@
                                                     <span class={token.dietBadgeClass}>{token.Diet_Preference__c}</span>
                                                 </td>
                                                 <td>
-                                                    <div class="slds-truncate font-mono" style="font-size: 0.8rem;">
+                                                    <div class="slds-truncate font-mono" style="font-size: 0.8rem; font-weight: 600;">
                                                         {token.Token_Time__c}
                                                     </div>
                                                 </td>
@@ -245,7 +268,9 @@
                                                     </template>
                                                 </td>
                                                 <td>
-                                                    <span class="slds-badge slds-theme_success">{token.Status__c}</span>
+                                                    <span class="slds-badge slds-theme_success" style="font-weight: 800;">
+                                                        &check; {token.Status__c}
+                                                    </span>
                                                 </td>
                                             </tr>
                                         </template>
@@ -257,7 +282,7 @@
                         <template if:false={hasTokens}>
                             <div class="slds-text-align_center slds-p-around_large slds-text-color_weak">
                                 <lightning-icon icon-name="utility:info" size="medium" class="slds-m-bottom_small"></lightning-icon>
-                                <p class="slds-text-heading_small">No tokens found matching this filter.</p>
+                                <p class="slds-text-heading_small" style="font-weight: 700;">No tokens found matching this filter.</p>
                                 <p class="slds-text-body_small slds-m-top_xx-small">Tokens issued from the frontend application will display here in real time.</p>
                             </div>
                         </template>
@@ -266,7 +291,185 @@
                 </lightning-tab>
 
                 <!-- -------------------------------------------------------- -->
-                <!-- TAB 2: SEPARATE OBJECT: LOGIN USERS & TOKEN ISSUERS       -->
+                <!-- TAB 2: HOSTEL ATTENDANCE & FOOD WASTE TRACKER (NEW)      -->
+                <!-- -------------------------------------------------------- -->
+                <lightning-tab label="Hostel Attendance &amp; Food Waste" icon-name="standard:task">
+                    <div class="slds-p-top_small">
+                        
+                        <!-- Kitchen Food Portion Control & Waste Mitigation Banner -->
+                        <div class="waste-mitigation-card slds-m-bottom_medium">
+                            <div class="waste-alert-banner slds-p-around_medium">
+                                <div class="slds-grid slds-wrap slds-grid_vertical-align-center slds-grid_align-spread">
+                                    <div class="slds-grid slds-grid_vertical-align-center">
+                                        <lightning-icon icon-name="utility:shield" size="small" class="slds-m-right_small"></lightning-icon>
+                                        <div>
+                                            <h3 class="slds-text-heading_small" style="font-weight: 800; color: #065f46;">
+                                                Automated Hostel Meal Attendance &amp; Zero Food Waste Protocol
+                                            </h3>
+                                            <p class="slds-text-body_small" style="color: #047857;">
+                                                Students with meal passes are marked <strong style="color: #065f46;">Present</strong>; students without passes are marked <strong style="color: #b91c1c;">Absent</strong> so kitchen avoids cooking surplus portions.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div class="slds-m-top_x-small slds-large-m-top_none">
+                                        <span class="slds-badge" style="background: #059669; color: #ffffff; font-weight: 800; font-size: 0.78rem;">
+                                            {presentStudentsCount} Served &bull; {absentStudentsCount} Portions Held
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Live Kitchen Portion Control Bars -->
+                            <div class="slds-p-around_medium">
+                                <div class="slds-grid slds-wrap slds-gutters">
+                                    <!-- Veg Portions -->
+                                    <div class="slds-col slds-size_1-of-1 slds-medium-size_6-of-12 slds-m-bottom_small slds-medium-m-bottom_none">
+                                        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px;" class="slds-p-around_small">
+                                            <div class="slds-grid slds-grid_align-spread slds-m-bottom_xx-small">
+                                                <span style="font-weight: 800; color: #065f46; font-size: 0.78rem;">🥗 Vegetarian Portions</span>
+                                                <span style="font-weight: 700; color: #065f46; font-size: 0.75rem;">
+                                                    {presentVegCount} Served &bull; {absentVegCount} On Hold
+                                                </span>
+                                            </div>
+                                            <div class="portion-bar-container">
+                                                <div style={vegServedWidthStyle}></div>
+                                            </div>
+                                            <div class="slds-text-body_small slds-m-top_xx-small" style="color: #047857; font-size: 0.7rem;">
+                                                Waste Guard: Hold {absentVegCount} portions until students check in.
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Non-Veg Portions -->
+                                    <div class="slds-col slds-size_1-of-1 slds-medium-size_6-of-12">
+                                        <div style="background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px;" class="slds-p-around_small">
+                                            <div class="slds-grid slds-grid_align-spread slds-m-bottom_xx-small">
+                                                <span style="font-weight: 800; color: #9a3412; font-size: 0.78rem;">🍗 Non-Vegetarian Portions</span>
+                                                <span style="font-weight: 700; color: #9a3412; font-size: 0.75rem;">
+                                                    {presentNonVegCount} Served &bull; {absentNonVegCount} On Hold
+                                                </span>
+                                            </div>
+                                            <div class="portion-bar-container">
+                                                <div style={nonVegServedWidthStyle}></div>
+                                            </div>
+                                            <div class="slds-text-body_small slds-m-top_xx-small" style="color: #c2410c; font-size: 0.7rem;">
+                                                Waste Guard: Hold {absentNonVegCount} portions until students check in.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Search & Filter Controls for Attendance -->
+                        <div class="slds-grid slds-wrap slds-grid_vertical-align-center slds-m-bottom_medium slds-grid_align-spread">
+                            <div class="slds-col slds-size_1-of-1 slds-medium-size_5-of-12 slds-m-bottom_x-small slds-medium-m-bottom_none">
+                                <lightning-input 
+                                    type="search" 
+                                    label="Search Residents" 
+                                    variant="label-hidden" 
+                                    placeholder="Filter by name, roll no, room, or token..." 
+                                    onchange={handleAttendanceSearch}
+                                    class="search-input-field">
+                                </lightning-input>
+                            </div>
+                            
+                            <!-- Filter Pills: All, Present, Absent -->
+                            <div class="slds-col slds-size_1-of-1 slds-medium-size_7-of-12 slds-text-align_right">
+                                <button type="button" class={allPillClass} onclick={handleAttendanceFilterAll}>
+                                    All Residents ({totalStudents})
+                                </button>
+                                <button type="button" class={presentPillClass} onclick={handleAttendanceFilterPresent} style="margin-left: 6px;">
+                                    &check; Present ({presentStudentsCount})
+                                </button>
+                                <button type="button" class={absentPillClass} onclick={handleAttendanceFilterAbsent} style="margin-left: 6px;">
+                                    &cross; Absent ({absentStudentsCount})
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Attendance Table -->
+                        <template if:true={hasAttendanceRecords}>
+                            <div class="slds-scrollable_x slds-border_top slds-border_bottom" style="border-radius: 8px;">
+                                <table class="slds-table slds-table_cell-buffer slds-table_bordered">
+                                    <thead>
+                                        <tr class="slds-line-height_reset" style="background: #f1f5f9;">
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Resident Student</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Hostel Block &amp; Room</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Diet Preference</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Automated Attendance Status</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Kitchen Food Impact</div></th>
+                                            <th scope="col" class="slds-text-align_center"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Action</div></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <template for:each={filteredAttendanceRoster} for:item="item">
+                                            <tr key={item.Id} class={item.rowClass}>
+                                                <td>
+                                                    <a href={item.recordUrl} target="_blank" style="font-weight: 700; color: #002b5c;">
+                                                        {item.Name}
+                                                    </a>
+                                                    <div class="slds-text-color_weak" style="font-size: 0.72rem; font-family: monospace;">
+                                                        {item.Student_ID__c} &bull; {item.Department__c}
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span class="badge-hostel-room">{item.hostelBlock} / Rm {item.roomNumber}</span>
+                                                </td>
+                                                <td>
+                                                    <span class={item.dietBadgeClass}>{item.Diet_Preference__c}</span>
+                                                </td>
+                                                <td>
+                                                    <span class={item.statusBadgeClass}>
+                                                        {item.statusText}
+                                                    </span>
+                                                    <template if:true={item.isPresent}>
+                                                        <div class="slds-text-body_small slds-m-top_xx-small" style="font-size: 0.7rem; font-family: monospace; color: #002b5c; font-weight: 700;">
+                                                            Token #{item.tokenNumber} &bull; {item.tokenTime}
+                                                        </div>
+                                                    </template>
+                                                    <template if:false={item.isPresent}>
+                                                        <div class="slds-text-body_small slds-m-top_xx-small" style="font-size: 0.7rem; color: #b91c1c; font-weight: 600;">
+                                                            Awaiting token claim
+                                                        </div>
+                                                    </template>
+                                                </td>
+                                                <td>
+                                                    <template if:true={item.isPresent}>
+                                                        <span style="color: #065f46; font-weight: 700; font-size: 0.78rem;">
+                                                            🍽️ {item.foodImpact}
+                                                        </span>
+                                                    </template>
+                                                    <template if:false={item.isPresent}>
+                                                        <span style="color: #b45309; font-weight: 700; font-size: 0.78rem;">
+                                                            ⏳ {item.foodImpact}
+                                                        </span>
+                                                    </template>
+                                                </td>
+                                                <td class="slds-text-align_center">
+                                                    <a href={item.recordUrl} target="_blank" class="slds-button slds-button_neutral slds-button_small" style="border-radius: 6px; font-weight: 700;">
+                                                        View Record
+                                                    </a>
+                                                </td>
+                                            </tr>
+                                        </template>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </template>
+
+                        <template if:false={hasAttendanceRecords}>
+                            <div class="slds-text-align_center slds-p-around_large slds-text-color_weak">
+                                <lightning-icon icon-name="utility:info" size="medium" class="slds-m-bottom_small"></lightning-icon>
+                                <p class="slds-text-heading_small" style="font-weight: 700;">No students found matching your attendance filter.</p>
+                            </div>
+                        </template>
+
+                    </div>
+                </lightning-tab>
+
+                <!-- -------------------------------------------------------- -->
+                <!-- TAB 3: SEPARATE OBJECT: LOGIN USERS & TOKEN ISSUERS       -->
                 <!-- -------------------------------------------------------- -->
                 <lightning-tab label="Login Users &amp; Token Issuers" icon-name="standard:user">
                     <div class="slds-p-top_small">
@@ -293,19 +496,19 @@
 
                         <!-- Mess Users Table -->
                         <template if:true={hasMessUsers}>
-                            <div class="slds-scrollable_x slds-border_top slds-border_bottom">
+                            <div class="slds-scrollable_x slds-border_top slds-border_bottom" style="border-radius: 8px;">
                                 <table class="slds-table slds-table_cell-buffer slds-table_bordered slds-table_striped">
                                     <thead>
-                                        <tr class="slds-line-height_reset" style="background: #f8fafc;">
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">User Full Name</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Institutional Email</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Contact Phone</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Designated Role</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Department</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Tokens Issued Today</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Lifetime Issued</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Last Login</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Status</div></th>
+                                        <tr class="slds-line-height_reset" style="background: #f1f5f9;">
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">User Full Name</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Institutional Email</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Contact Phone</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Designated Role</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Department</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Tokens Today</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Lifetime Issued</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Last Login</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Status</div></th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -317,7 +520,7 @@
                                                     </a>
                                                 </td>
                                                 <td>
-                                                    <div class="slds-truncate slds-text-color_weak font-mono">
+                                                    <div class="slds-truncate slds-text-color_weak font-mono" style="font-size: 0.75rem;">
                                                         {user.Email__c}
                                                     </div>
                                                 </td>
@@ -335,7 +538,7 @@
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <span class="slds-badge slds-theme_success" style="font-weight: 800; font-size: 0.8rem;">
+                                                    <span class="slds-badge slds-theme_success" style="font-weight: 800; font-size: 0.78rem;">
                                                         {user.tokensToday} Tokens
                                                     </span>
                                                 </td>
@@ -362,8 +565,7 @@
                         <template if:false={hasMessUsers}>
                             <div class="slds-text-align_center slds-p-around_large slds-text-color_weak">
                                 <lightning-icon icon-name="utility:info" size="medium" class="slds-m-bottom_small"></lightning-icon>
-                                <p class="slds-text-heading_small">No Mess Managers or Token Issuers registered yet.</p>
-                                <p class="slds-text-body_small slds-m-top_xx-small">When a Mess Manager or Principal logs in, their profile will be created automatically.</p>
+                                <p class="slds-text-heading_small" style="font-weight: 700;">No Mess Managers or Token Issuers registered yet.</p>
                             </div>
                         </template>
 
@@ -371,7 +573,7 @@
                 </lightning-tab>
 
                 <!-- -------------------------------------------------------- -->
-                <!-- TAB 3: REGISTERED STUDENTS DINING ROSTER                  -->
+                <!-- TAB 4: REGISTERED STUDENTS DINING ROSTER                  -->
                 <!-- -------------------------------------------------------- -->
                 <lightning-tab label="Registered Students Dining Roster" icon-name="standard:contact">
                     <div class="slds-p-top_small">
@@ -398,19 +600,19 @@
 
                         <!-- Students Table -->
                         <template if:true={hasStudents}>
-                            <div class="slds-scrollable_x slds-border_top slds-border_bottom">
+                            <div class="slds-scrollable_x slds-border_top slds-border_bottom" style="border-radius: 8px;">
                                 <table class="slds-table slds-table_cell-buffer slds-table_bordered slds-table_striped">
                                     <thead>
-                                        <tr class="slds-line-height_reset" style="background: #f8fafc;">
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Student Name</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Roll Number</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Academic Year</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Department</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Hostel &amp; Room</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Diet Preference</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Contact Phone</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Student Email</div></th>
-                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800;">Status</div></th>
+                                        <tr class="slds-line-height_reset" style="background: #f1f5f9;">
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Student Name</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Roll Number</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Academic Year</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Department</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Hostel &amp; Room</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Diet Preference</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Contact Phone</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Student Email</div></th>
+                                            <th scope="col"><div class="slds-truncate" style="font-weight: 800; color: #002b5c;">Status</div></th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -422,12 +624,12 @@
                                                     </a>
                                                 </td>
                                                 <td>
-                                                    <span class="slds-badge font-mono" style="font-weight: 700;">
+                                                    <span class="badge-token-pill" style="background: #e2e8f0; color: #0f172a; font-size: 0.72rem;">
                                                         {student.Student_ID__c}
                                                     </span>
                                                 </td>
                                                 <td>
-                                                    <span class="slds-badge font-mono" style="font-weight: 700; background: #e0f2fe; color: #0369a1;">
+                                                    <span class="slds-badge" style="font-weight: 700; background: #e0f2fe; color: #0369a1; font-size: 0.72rem;">
                                                         {student.academicYear}
                                                     </span>
                                                 </td>
@@ -437,9 +639,7 @@
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <div class="slds-truncate slds-text-color_weak font-mono">
-                                                        {student.Hostel_Room__c}
-                                                    </div>
+                                                    <span class="badge-hostel-room">{student.Hostel_Room__c}</span>
                                                 </td>
                                                 <td>
                                                     <span class={student.dietBadgeClass}>{student.Diet_Preference__c}</span>
@@ -467,7 +667,7 @@
                         <template if:false={hasStudents}>
                             <div class="slds-text-align_center slds-p-around_large slds-text-color_weak">
                                 <lightning-icon icon-name="utility:info" size="medium" class="slds-m-bottom_small"></lightning-icon>
-                                <p class="slds-text-heading_small">No students found matching this search.</p>
+                                <p class="slds-text-heading_small" style="font-weight: 700;">No students found matching this search.</p>
                             </div>
                         </template>
 
