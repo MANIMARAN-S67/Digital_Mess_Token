@@ -15,6 +15,7 @@ import { AdminProfileModal } from './components/AdminProfileModal';
 import { LoginScreen } from './components/LoginScreen';
 import { StudentDashboard } from './components/StudentDashboard';
 import { BackendInspectorModal } from './components/BackendInspectorModal';
+import { INITIAL_STUDENTS } from './data/initialData';
 import { DailyMenu, DailyStats, MealType, Student, TokenIssuanceLog, MessUserRecord } from './types';
 import { useAuth } from './context/AuthContext';
 import sfApi from './services/salesforceApi';
@@ -145,21 +146,9 @@ export default function App() {
         setLogs(convertedLogs);
       }
 
-      // Base resident roster
+      // Base resident roster combining INITIAL_STUDENTS and hostel residents
       const baseStudents: Student[] = [
-        {
-          id: '21CS1004',
-          name: 'Rahul Sharma',
-          academicYear: '4th Year',
-          department: 'Computer Science',
-          hostelRoom: 'BH-3 / 214',
-          preference: 'Non-Veg',
-          status: 'Active Plan',
-          photoUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-          email: 'rahul.sharma@institution.edu',
-          phone: '+91 98451 23456',
-          issuedSessionsToday: {}
-        },
+        ...INITIAL_STUDENTS,
         {
           id: '22EC1012',
           name: 'Aditi Rao',
@@ -187,6 +176,34 @@ export default function App() {
           issuedSessionsToday: {}
         }
       ];
+
+      // Merge registered users from localStorage cache if present
+      try {
+        const cachedRaw = localStorage.getItem('registered_users_cache');
+        if (cachedRaw) {
+          const cachedUsers = JSON.parse(cachedRaw);
+          if (Array.isArray(cachedUsers)) {
+            cachedUsers.forEach((u: any) => {
+              const sid = u.studentId || u.Id;
+              if (sid && !baseStudents.some((s) => s.id === sid)) {
+                baseStudents.push({
+                  id: sid,
+                  name: u.name || 'Registered Resident',
+                  academicYear: u.academicYear || '1st Year',
+                  department: u.department || 'Hostel Resident',
+                  hostelRoom: u.hostelRoom || 'BH-2 / 201',
+                  preference: (u.preference === 'Non-Veg' ? 'Non-Veg' : 'Veg') as any,
+                  status: 'Active Plan',
+                  photoUrl: u.photoUrl || '',
+                  phone: u.phone || '',
+                  email: u.email || '',
+                  issuedSessionsToday: {}
+                });
+              }
+            });
+          }
+        }
+      } catch {}
 
       // Add currently logged in user to students list only if they are a student with studentId
       if (dbUser.role === 'Student' && dbUser.studentId) {
@@ -305,7 +322,7 @@ export default function App() {
       const todayTokens = cloudTokens.filter((t) => t.date === today && t.status !== 'Cancelled');
       const studentsWithSessions = baseStudents.map((s) => {
         const sTokensToday = todayTokens.filter((t) => t.studentId === s.id);
-        const sessions: Student['issuedSessionsToday'] = {};
+        const sessions: Student['issuedSessionsToday'] = { ...(s.issuedSessionsToday || {}) };
         sTokensToday.forEach((t) => {
           sessions[t.mealType] = {
             tokenId: t.id,
@@ -693,7 +710,16 @@ export default function App() {
             )}
 
             {currentTab === 'reports' && (
-              <ReportsScreen stats={stats} logs={logs} messUsers={messUsers} />
+              <ReportsScreen
+                stats={stats}
+                logs={logs}
+                messUsers={messUsers}
+                students={students}
+                currentMeal={currentMeal}
+                onIssueToken={handleIssueToken}
+                onSelectStudentForIssue={handleSelectStudentForIssue}
+                onChangeTab={setCurrentTab}
+              />
             )}
           </>
         )}

@@ -256,7 +256,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
         <h3 className="text-[12px] font-bold text-[#43474e] mb-3 uppercase tracking-wider">
           Quick Actions
         </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
           {/* Issue Token */}
           <button
             onClick={() => onChangeTab('search')}
@@ -269,6 +269,20 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               qr_code_scanner
             </span>
             <span className="text-[14px] font-bold text-center">Issue Token</span>
+          </button>
+
+          {/* Hostel Attendance & Food Waste Tracker */}
+          <button
+            onClick={() => onChangeTab('reports')}
+            className="bg-white border border-[#a7f3d0] text-[#065f46] rounded-xl p-4 flex flex-col items-center justify-center gap-2 h-32 hover:bg-[#ecfdf5] active:scale-98 transition-all shadow-xs group cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[32px] text-[#059669] group-hover:scale-110 transition-transform">
+              fact_check
+            </span>
+            <span className="text-[14px] font-bold text-center">Hostel Attendance</span>
+            <span className="text-[10px] font-bold bg-[#d1fae5] text-[#065f46] px-2 py-0.5 rounded-full">
+              Food Waste Guard
+            </span>
           </button>
 
           {/* Update Menu */}
@@ -296,12 +310,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           {/* Database & Logs Inspector */}
           <button
             onClick={() => (onOpenBackendInspector ? onOpenBackendInspector() : onChangeTab('reports'))}
-            className="bg-white border border-emerald-400 text-emerald-900 rounded-xl p-4 flex flex-col items-center justify-center gap-2 h-32 hover:bg-emerald-50 active:scale-98 transition-all shadow-xs group cursor-pointer"
+            className="bg-white border border-emerald-400 text-emerald-900 rounded-xl p-4 flex flex-col items-center justify-center gap-2 h-32 hover:bg-emerald-50 active:scale-98 transition-all shadow-xs group cursor-pointer col-span-2 sm:col-span-1"
           >
             <span className="material-symbols-outlined text-[32px] text-emerald-700 group-hover:scale-110 transition-transform">
               database
             </span>
-            <span className="text-[14px] font-bold text-center">Backend Database</span>
+            <span className="text-[14px] font-bold text-center">Backend DB</span>
           </button>
         </div>
       </section>
