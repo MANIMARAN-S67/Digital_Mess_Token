@@ -14,7 +14,6 @@ interface HomeScreenProps {
   onOpenRegisterStudent: () => void;
   onSelectStudentForIssue: (studentId: string) => void;
   onOpenBackendInspector?: () => void;
-  onSwitchToStudentView?: () => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -26,8 +25,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onChangeTab,
   onOpenRegisterStudent,
   onSelectStudentForIssue,
-  onOpenBackendInspector,
-  onSwitchToStudentView
+  onOpenBackendInspector
 }) => {
   const { dbUser, signOut } = useAuth();
   const userName = dbUser?.name || 'Administrator';
@@ -137,14 +135,10 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 <span className="px-2 py-0.5 bg-[#9ff5c1] text-[#005231] text-[10px] font-bold uppercase rounded-md shrink-0">
                   {userRole}
                 </span>
-                {onSwitchToStudentView && (
-                  <button
-                    onClick={onSwitchToStudentView}
-                    className="px-2 py-0.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-[10px] font-bold rounded-md border border-blue-200 transition-all cursor-pointer"
-                  >
-                    Preview Student Portal
-                  </button>
-                )}
+                <span className="px-2 py-0.5 bg-[#002045] text-white text-[10px] font-bold uppercase rounded-md shrink-0 flex items-center gap-1 shadow-xs">
+                  <span className="material-symbols-outlined text-[13px]">verified_user</span>
+                  Full Management Access
+                </span>
               </div>
               <p className="text-[13px] text-[#43474e] mt-0.5 flex items-center gap-2 flex-wrap">
                 <span>Account:</span>

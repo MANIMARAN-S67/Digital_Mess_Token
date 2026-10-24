@@ -93,7 +93,7 @@ export const AdminProfileModal: React.FC<AdminProfileModalProps> = ({
           {/* Account Details Box */}
           <div className="p-3 bg-gray-50 rounded-xl border border-gray-200/70 text-[12px] space-y-1.5">
             <div className="flex justify-between items-center text-gray-600">
-              <span className="font-medium">User ID / Roll:</span>
+              <span className="font-medium">Management Staff ID:</span>
               <span className="font-mono font-bold text-gray-900">{dbUser?.studentId || dbUser?.Id || 'N/A'}</span>
             </div>
             <div className="flex justify-between items-center text-gray-600">
@@ -101,8 +101,8 @@ export const AdminProfileModal: React.FC<AdminProfileModalProps> = ({
               <span className="font-semibold text-gray-900">{dbUser?.preference || 'Veg'}</span>
             </div>
             <div className="flex justify-between items-center text-gray-600">
-              <span className="font-medium">Hostel / Location:</span>
-              <span className="font-semibold text-gray-900">{dbUser?.hostelRoom || 'Admin Office'}</span>
+              <span className="font-medium">Management Location / Office:</span>
+              <span className="font-semibold text-gray-900">{dbUser?.hostelRoom || 'Central Mess Operations Hub'}</span>
             </div>
           </div>
 

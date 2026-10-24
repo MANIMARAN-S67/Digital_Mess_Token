@@ -18,9 +18,30 @@ import { UserProfile } from '../types';
 
 /**
  * Checks if an email or identifier belongs to a student.
- * Students are strictly forbidden from logging in on this administrative portal.
+ * Students are strictly forbidden from logging in on this administrative operations portal.
  */
-export const isStudentIdentifier = (_emailOrId: string): boolean => {
+export const isStudentIdentifier = (emailOrId: string): boolean => {
+  if (!emailOrId) return false;
+  const clean = emailOrId.trim().toLowerCase();
+
+  // Whitelist all administrator and manager emails/credentials:
+  if (
+    clean === '717823f132@kce.ac.in' ||
+    clean.includes('principal') ||
+    clean.includes('manager') ||
+    clean.includes('admin') ||
+    clean.includes('warden')
+  ) {
+    return false;
+  }
+
+  // Check student roll number patterns like 21CS1004, 22ME1045, etc.
+  const isStudentRoll = /^\d{2}[a-z]{2,4}\d{3,4}$/i.test(clean);
+  if (isStudentRoll) return true;
+
+  // Check email starting with student roll pattern (excluding management whitelisted account)
+  if (/^\d{2}[a-z]{2,4}\d{3,4}@/i.test(clean)) return true;
+
   return false;
 };
 
@@ -129,7 +150,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await firebaseSignOut(auth).catch(() => {});
       sessionStorage.removeItem('mess_session_user');
       sessionStorage.removeItem('firebase_email');
-      const accessErr = "Access Denied: Only Mess Managers and the College Principal are authorized to access this portal with their email. Students are not allowed to log in here.";
+      const accessErr = "Access Restricted: Students are not permitted to use this portal. This portal is exclusively for Mess Managers and College Management.";
       setAuthError(accessErr);
       throw new Error(accessErr);
     }
@@ -174,7 +195,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (existingData.role === 'Student') {
           await firebaseSignOut(auth).catch(() => {});
           sessionStorage.removeItem('mess_session_user');
-          const accessErr = "Access Denied: Student accounts are not permitted to log in. Only Mess Managers and College Principals have access.";
+          const accessErr = "Access Restricted: Students are not permitted to use this portal. This portal is exclusively for Mess Managers and College Management.";
           setAuthError(accessErr);
           throw new Error(accessErr);
         }
@@ -252,21 +273,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       // 1. Strict check: If student email, block immediately
       if (isStudentIdentifier(email)) {
         await firebaseSignOut(auth).catch(() => {});
-        setAuthError("Access Denied: Only Mess Managers and the College Principal are authorized to access this portal with their email. Students are not allowed to log in here.");
+        setAuthError("Access Restricted: Students are not permitted to use this portal. This portal is exclusively for Mess Managers and College Management.");
         setDbUser(null);
         return;
       }
 
-      // 2. Check if student exists in Salesforce Student__c table
-      try {
-        const studRes = await sfApi.query(`SELECT Id, Name, Student_ID__c FROM Student__c WHERE Email__c = '${email}' LIMIT 1`);
-        if (studRes && studRes.records && studRes.records.length > 0) {
-          await firebaseSignOut(auth).catch(() => {});
-          setAuthError("Access Denied: Student accounts are not permitted to log in. Only Mess Managers and College Principals have access.");
-          setDbUser(null);
-          return;
-        }
-      } catch {}
+      // 2. Check if student exists in Salesforce Student__c table (excluding management whitelisted accounts)
+      if (email.toLowerCase() !== '717823f132@kce.ac.in') {
+        try {
+          const studRes = await sfApi.query(`SELECT Id, Name, Student_ID__c FROM Student__c WHERE Email__c = '${email}' LIMIT 1`);
+          if (studRes && studRes.records && studRes.records.length > 0) {
+            await firebaseSignOut(auth).catch(() => {});
+            setAuthError("Access Restricted: Students are not permitted to use this portal. This portal is exclusively for Mess Managers and College Management.");
+            setDbUser(null);
+            return;
+          }
+        } catch {}
+      }
 
       // 3. Query Mess_User__c table in Salesforce
       const isPrincipal = email.toLowerCase().includes('principal');
@@ -424,7 +447,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           await firebaseSignOut(auth).catch(() => {});
           sessionStorage.removeItem('mess_session_user');
           sessionStorage.removeItem('firebase_email');
-          const accessErr = "Access Denied: Only Mess Managers and the College Principal are authorized to access this portal with their email. Students are not allowed to log in here.";
+          const accessErr = "Access Restricted: Students are not permitted to use this portal. This portal is exclusively for Mess Managers and College Management.";
           setAuthError(accessErr);
           return;
         }
@@ -953,11 +976,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     pass: string, 
     name: string, 
     phone?: string, 
-    role?: 'Mess Manager' | 'College Principal' | 'Student' | 'Admin'
+    role?: 'Mess Manager' | 'College Principal' | 'Admin'
   ) => {
     clearAuthError();
     const cleanEmail = email.trim().toLowerCase();
     const cleanPhone = phone ? phone.trim().replace(/\D/g, '').slice(-10) : '';
+
+    // Block any student attempt to register
+    if (isStudentIdentifier(cleanEmail) || (role as string) === 'Student') {
+      const errMsg = "Access Restricted: Students are not permitted to register on this portal. This portal is exclusively for Mess Managers and College Management.";
+      setAuthError(errMsg);
+      throw new Error(errMsg);
+    }
 
     // 1. Strict Duplicate Email Prevention
     const alreadyExists = await checkEmailExists(cleanEmail);
@@ -1026,8 +1056,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const loginWithStudentId = async (_identifier: string) => {
     clearAuthError();
-    const errMsg = "Student login is disabled. This portal is strictly for Mess Managers and the College Principal only.";
+    const errMsg = "Access Restricted: Students are not permitted to use this portal. This portal is exclusively for Mess Managers and College Management.";
     setAuthError(errMsg);
+    throw new Error(errMsg);
   };
 
   const loginAsDemoUser = (role: 'Mess Manager' | 'College Principal' | 'Admin' = 'Mess Manager') => {

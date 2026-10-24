@@ -526,8 +526,13 @@ export const LoginScreen: React.FC = () => {
           <h1 className="text-2xl font-extrabold text-gray-900 tracking-tight">
             Digital Mess Token
           </h1>
-          <p className="text-xs font-semibold text-gray-500 mt-1 uppercase tracking-wider">
-            Institutional Dining &amp; Management Portal
+          <div className="mt-1 flex items-center justify-center">
+            <span className="px-2.5 py-0.5 bg-[#002045] text-white text-[11px] font-bold rounded-md uppercase tracking-wider">
+              Mess Manager &amp; College Management Portal
+            </span>
+          </div>
+          <p className="text-[11px] font-medium text-amber-800 bg-amber-50 border border-amber-200/80 rounded-lg px-3 py-1.5 mt-2.5 max-w-sm leading-snug">
+            <span className="font-bold">Restricted Access:</span> Exclusively for Mess Managers and College Administration. Students are not permitted to use this portal.
           </p>
         </div>
 
@@ -718,9 +723,12 @@ export const LoginScreen: React.FC = () => {
         {/* ------------------------------------------------------------- */}
         {mode === 'signup' && (
           <form onSubmit={handleSignUpSubmit} className="flex flex-col gap-3.5 mt-1">
-            <div className="bg-sky-50 border border-sky-100 rounded-xl p-2.5 text-center">
-              <p className="text-[11px] font-semibold text-sky-800">
-                Create your account. All fields are required.
+            <div className="bg-[#eff4ff] border border-[#adc7f7]/60 rounded-xl p-2.5 text-center">
+              <p className="text-[11px] font-bold text-[#002045]">
+                Mess Manager &amp; Management Registration
+              </p>
+              <p className="text-[10px] text-gray-500 mt-0.5">
+                Full administrative access granted upon registration. Students cannot register.
               </p>
             </div>
 

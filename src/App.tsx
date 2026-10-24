@@ -13,7 +13,6 @@ import { RegisterStudentModal } from './components/RegisterStudentModal';
 import { NotificationsDrawer } from './components/NotificationsDrawer';
 import { AdminProfileModal } from './components/AdminProfileModal';
 import { LoginScreen } from './components/LoginScreen';
-import { StudentDashboard } from './components/StudentDashboard';
 import { BackendInspectorModal } from './components/BackendInspectorModal';
 import { INITIAL_STUDENTS } from './data/initialData';
 import { DailyMenu, DailyStats, MealType, Student, TokenIssuanceLog, MessUserRecord } from './types';
@@ -25,8 +24,7 @@ import {
   issueMealToken, 
   resetStudentSession, 
   getAllTokens, 
-  tokenRecordToLog, 
-  TokenRecord 
+  tokenRecordToLog 
 } from './services/tokenService';
 import { getCurrentMealType } from './utils/mealTime';
 import { db } from './firebase/config';
@@ -56,7 +54,7 @@ const defaultStats: DailyStats = {
 };
 
 export default function App() {
-  const { dbUser, loading: authLoading } = useAuth();
+  const { dbUser, loading: authLoading, signOut } = useAuth();
   
   const [authStep, setAuthStep] = useState<'login' | 'authenticated'>('login');
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
@@ -71,7 +69,6 @@ export default function App() {
 
   // Modal and view states
   const [isBackendInspectorOpen, setIsBackendInspectorOpen] = useState(false);
-  const [previewStudentView, setPreviewStudentView] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string>('');
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isRegisterOpen, setIsRegisterOpen] = useState(false);
@@ -89,6 +86,11 @@ export default function App() {
 
   useEffect(() => {
     if (dbUser) {
+      if (dbUser.role === 'Student') {
+        // Strict access control: students are not allowed in this operations portal
+        signOut();
+        return;
+      }
       setAuthStep('authenticated');
       if (getSalesforceToken()) {
         salesforceSyncService.syncUserLogin(dbUser).catch((e) => {
@@ -98,9 +100,7 @@ export default function App() {
     } else {
       setAuthStep('login');
     }
-  }, [dbUser]);
-
-  const isStudentView = dbUser?.role === 'Student' || previewStudentView;
+  }, [dbUser, signOut]);
 
   const playSoundChime = (type: 'success' | 'alert') => {
     if (!soundEnabled) return;
@@ -629,8 +629,6 @@ export default function App() {
     return <LoginScreen />;
   }
 
-  const activeStudent = students.find((s) => s.id === dbUser?.studentId || s.id === dbUser?.Id) || students[0];
-
   return (
     <div className="min-h-screen bg-[#f8f9ff] text-[#0d1c2e] flex flex-col font-sans selection:bg-[#1a365d] selection:text-white">
       <TopAppBar
@@ -660,37 +658,17 @@ export default function App() {
         ) : (
           <>
             {currentTab === 'home' && (
-              isStudentView && activeStudent ? (
-                <StudentDashboard
-                  student={activeStudent}
-                  currentMeal={currentMeal}
-                  menu={menu}
-                  onDeclareToken={handleIssueToken}
-                  onViewTokenSlip={(tRecord: TokenRecord) => {
-                    setIssuedSlipData({
-                      student: activeStudent,
-                      tokenNumber: tRecord.tokenNumber,
-                      issuedAt: tRecord.time,
-                      mealType: tRecord.mealType,
-                      issuedByName: tRecord.issuedByName
-                    });
-                  }}
-                  onSwitchToAdminView={dbUser?.role !== 'Student' ? () => setPreviewStudentView(false) : undefined}
-                />
-              ) : (
-                <HomeScreen
-                  currentMeal={currentMeal}
-                  onChangeMeal={setCurrentMeal}
-                  stats={stats}
-                  menu={menu}
-                  recentLogs={logs}
-                  onChangeTab={setCurrentTab}
-                  onOpenRegisterStudent={() => setIsRegisterOpen(true)}
-                  onSelectStudentForIssue={handleSelectStudentForIssue}
-                  onOpenBackendInspector={() => setIsBackendInspectorOpen(true)}
-                  onSwitchToStudentView={() => setPreviewStudentView(true)}
-                />
-              )
+              <HomeScreen
+                currentMeal={currentMeal}
+                onChangeMeal={setCurrentMeal}
+                stats={stats}
+                menu={menu}
+                recentLogs={logs}
+                onChangeTab={setCurrentTab}
+                onOpenRegisterStudent={() => setIsRegisterOpen(true)}
+                onSelectStudentForIssue={handleSelectStudentForIssue}
+                onOpenBackendInspector={() => setIsBackendInspectorOpen(true)}
+              />
             )}
 
             {currentTab === 'search' && (
